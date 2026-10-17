@@ -2,14 +2,17 @@
 Evaluate finished CFM SWI_DiT checkpoints on the test set.
 
 Usage (from the repo root):
-    python eval/evaluate.py                                   # every folder in FOLDERS below
+    python eval/evaluate.py                                   # every model in finished_ckpt/
     python eval/evaluate.py finished_ckpt/6_2_128_SWiDiT      # or folders given on the command line
     python eval/evaluate.py --n_samples 20 --max_batches 10
 
-Each folder can be the run folder itself or any parent of it — the script finds
-best.pt (or --ckpt last.pt) and student_config.json inside it. A checkpoint that was
-split to fit GitHub's file limit (best_0.pt, best_1.pt, ... or best.pt.part_aa, ...)
-is joined in memory automatically.
+With no folders, every folder under finished_ckpt/ holding best.pt (or --ckpt) is one
+model, e.g. finished_ckpt/6_4_256_SWiDiT/model and each round of
+finished_ckpt/6_4_256_Progressive/model/steps_NN. A folder given on the command line
+can be the run folder itself or any parent of it. A checkpoint that was split to fit
+GitHub's file limit (best_0.pt, best_1.pt, ... or best.pt.part_aa, ...) is joined in
+memory automatically. Progressive-distillation students are sampled with their own
+step count (stored in the checkpoint) instead of --n_steps.
 
 For every test window the model samples K possible futures (K = --n_samples).
 Errors are distances in metres between predicted and true (x, y) positions:
@@ -39,16 +42,19 @@ from DataLoaders.ADSBdataset import get_dataloaders
 from models.SWI_DiT import TrajectoryDiT
 from models.cfm import euler_sample
 
-# Folders to evaluate when none are given on the command line — add or remove lines.
-# Paths are relative to the repo root (absolute paths work too).
-FOLDERS = [
-    "finished_ckpt/6_2_128_SWiDiT",
-    "finished_ckpt/6_2_256_SWiDiT",
-    "finished_ckpt/6_2_384_SWiDiT",
-    "finished_ckpt/6_4_128_SWiDiT",
-    "finished_ckpt/6_4_256_SWiDiT",
-    "finished_ckpt/6_4_384_SWiDiT",
-]
+def find_run_folders(ckpt_name):
+    """Every folder in finished_ckpt/ holding ckpt_name (or split pieces of it) — one per model."""
+    stem  = Path(ckpt_name).stem
+    found = [*(ROOT / "finished_ckpt").rglob(ckpt_name),
+             *(ROOT / "finished_ckpt").rglob(f"{stem}_0.pt")]
+    return sorted({p.parent for p in found})
+
+
+def model_name(folder, n_steps=None):
+    """finished_ckpt/6_4_256_SWiDiT/model → 6_4_256_SWiDiT; progressive rounds get _<n>step."""
+    parts = Path(folder).resolve().parts
+    name  = parts[parts.index("finished_ckpt") + 1] if "finished_ckpt" in parts else Path(folder).name
+    return name + (f"_{n_steps}step" if n_steps else "")
 
 
 def find_file(folder, name):
@@ -101,6 +107,8 @@ def load_model(folder, ckpt_name, device):
     cfg_path = ckpt_path.parent / "student_config.json"
     if cfg_path.exists():
         cfg = json.loads(cfg_path.read_text())
+    elif ckpt.get("student_config"):
+        cfg = ckpt["student_config"]
     else:
         sys.exit(f"No student_config.json next to {ckpt_path} and none stored in the checkpoint")
 
@@ -111,7 +119,7 @@ def load_model(folder, ckpt_name, device):
     seed = ckpt.get("train_config", {}).get("seed", 42)
     print(f"Checkpoint: {ckpt_path} (epoch {ckpt.get('epoch')})")
     print(f"Model: {cfg['model']} | {sum(p.numel() for p in model.parameters()):,} params")
-    return model, seed
+    return model, seed, ckpt.get("n_steps")   # n_steps: set by progressive distillation
 
 
 def evaluate(model, test_loader, feat_std, device, n_samples, n_steps, max_batches):
@@ -153,19 +161,20 @@ def evaluate(model, test_loader, feat_std, device, n_samples, n_steps, max_batch
 def main(device=None):
     """Parse args and evaluate every folder. device=None → CUDA if available, else CPU."""
     parser = argparse.ArgumentParser(description="Test-set ADE/FDE for finished checkpoints")
-    parser.add_argument("folders", nargs="*", help="run folders (default: FOLDERS in this file)")
+    parser.add_argument("folders", nargs="*", help="run folders (default: every model in finished_ckpt/)")
     parser.add_argument("--nc_path", default=str(ROOT / "Data" / "trajectories_adsblol_seq86_stage2.nc"))
     parser.add_argument("--ckpt", default="best.pt", help="best.pt or last.pt")
     parser.add_argument("--n_samples", type=int, default=20, help="K futures sampled per window")
-    parser.add_argument("--n_steps", type=int, default=20, help="Euler steps (training used 20)")
+    parser.add_argument("--n_steps", type=int, default=20,
+                        help="Euler steps (training used 20; progressive students use their own)")
     parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--max_batches", type=int, default=None, help="limit for a quick check")
     parser.add_argument("--num_workers", type=int, default=2)
     parser.add_argument("--out", default=None, help="also save the results to this JSON file")
     args = parser.parse_args()
 
-    folders = args.folders or FOLDERS
-    folders = [f if Path(f).is_absolute() or Path(f).exists() else ROOT / f for f in folders]
+    folders = [f if Path(f).is_absolute() or Path(f).exists() else ROOT / f
+               for f in args.folders] or find_run_folders(args.ckpt)
     missing = [str(f) for f in folders if not Path(f).is_dir()]
     if missing:
         sys.exit("Folder(s) not found: " + ", ".join(missing))
@@ -181,7 +190,7 @@ def main(device=None):
     all_results = {}
     for folder in folders:
         print(f"\n=== {folder} ===")
-        model, seed = load_model(folder, args.ckpt, device)
+        model, seed, ckpt_steps = load_model(folder, args.ckpt, device)
         if seed not in test_loaders:
             # same seed as training → same split, so these aircraft were never trained on
             _, _, test_loaders[seed] = get_dataloaders(args.nc_path, batch_size=args.batch_size,
@@ -189,13 +198,13 @@ def main(device=None):
 
         torch.manual_seed(0)   # same sampling noise for every model → comparable numbers
         results, n = evaluate(model, test_loaders[seed], feat_std, device,
-                              args.n_samples, args.n_steps, args.max_batches)
-        all_results[Path(folder).name] = results
+                              args.n_samples, ckpt_steps or args.n_steps, args.max_batches)
+        all_results[model_name(folder, ckpt_steps)] = results
         for name, value in results.items():
             print(f"  {name}: {value:8.1f} m")
 
     # side-by-side summary
-    print(f"\nTest set: {n:,} windows | K={args.n_samples} samples | {args.n_steps} Euler steps | metres")
+    print(f"\nTest set: {n:,} windows | K={args.n_samples} samples | {args.n_steps} Euler steps (progressive: own) | metres")
     names = list(next(iter(all_results.values())))
     width = max(len(k) for k in all_results) + 2
     print("model".ljust(width) + "".join(f"{m:>10}" for m in names))

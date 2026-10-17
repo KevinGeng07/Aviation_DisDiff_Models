@@ -1,13 +1,14 @@
 #!/bin/bash
 # ---------------------------------------------------------------------------
-# SLURM job script: test-set ADE/FDE for finished checkpoints (eval/evaluate.py), 1 GPU
+# SLURM job script: evaluate finished checkpoints, 1 GPU
+#   SCRIPT=evaluate        (default) test-set ADE/FDE        → table in logs/eval_<jobid>.out
+#   SCRIPT=sample_futures  sampled futures for 10 windows    → eval/futures.csv
 #
 # Usage (on Savio, from the repo root):
-#   sbatch savio_batchfiles/EvalSavio.sh                                  # every folder in FOLDERS in eval/evaluate.py
-#   sbatch savio_batchfiles/EvalSavio.sh finished_ckpt/6_5_SWiDiT training/checkpoints/distill_4L_384_a07
-#   EVAL_ARGS="--n_samples 5 --max_batches 50" sbatch savio_batchfiles/EvalSavio.sh   # extra evaluate.py options
-#
-# Results (per model + a side-by-side table at the end) go to logs/eval_<jobid>.out
+#   sbatch savio_batchfiles/EvalSavio.sh                                  # every model in finished_ckpt/
+#   sbatch savio_batchfiles/EvalSavio.sh finished_ckpt/6_4_256_SWiDiT training/checkpoints/distill_4L_384_a07
+#   EVAL_ARGS="--n_samples 5 --max_batches 50" sbatch savio_batchfiles/EvalSavio.sh   # extra script options
+#   SCRIPT=sample_futures sbatch savio_batchfiles/EvalSavio.sh            # futures CSV for every model
 # ---------------------------------------------------------------------------
 #SBATCH --job-name=eval
 #SBATCH --account=ac_mixedav
@@ -31,6 +32,7 @@ NC_PATH=/global/scratch/users/kevingeng/aviation-bayen/data/trajectories_adsblol
 REPO=/global/scratch/users/kevingeng/aviation-bayen/AviationDiffusionModelsKishore
 cd $REPO
 
-echo "Folders: ${*:-FOLDERS list in eval/evaluate.py} | extra args: ${EVAL_ARGS:-none}"
+SCRIPT=${SCRIPT:-evaluate}
+echo "Script: eval/$SCRIPT.py | folders: ${*:-every model in finished_ckpt/} | extra args: ${EVAL_ARGS:-none}"
 # -u: unbuffered so results show up in the log as each model finishes
-$PYTHON -u eval/evaluate.py "$@" --nc_path $NC_PATH --num_workers ${SLURM_CPUS_PER_TASK:-2} $EVAL_ARGS
+$PYTHON -u eval/$SCRIPT.py "$@" --nc_path $NC_PATH --num_workers ${SLURM_CPUS_PER_TASK:-2} $EVAL_ARGS
