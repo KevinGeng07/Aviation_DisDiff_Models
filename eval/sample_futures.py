@@ -9,10 +9,11 @@ Usage (from the repo root):
 Picks --n_traj random test windows (the same ones for every model), samples
 --n_samples futures from each model, and writes one row per point:
 
-    model, window, future, step, x_m, y_m
+    model, window, future, step, x_m, y_m, z_m, vx_ms, vy_ms, vz_ms
 
 window = index of the window in the .nc file, future = 1..K (0 = the true future),
-step = 1..43, x_m / y_m = position in metres. Every model starts from the same
+step = 1..43, x_m / y_m = metres east / north of SFO, z_m = altitude in metres,
+vx_ms / vy_ms / vz_ms = east / north / climb speed in m/s. Every model starts from the same
 sampling noise. Progressive-distillation students (checkpoints that store n_steps)
 are sampled with their own step count and labelled e.g. 6_4_256_Progressive_4step.
 """
@@ -33,14 +34,14 @@ from evaluate import load_model, find_run_folders, model_name
 
 
 def sample_futures(model, test_ds, picks, n_samples, n_steps, device):
-    """n_samples futures for the picked test windows, (x, y) in metres: (K, n_picks, 43, 2)."""
+    """n_samples futures for the picked test windows, all 6 features in m and m/s: (K, n_picks, 43, 6)."""
     items = [test_ds[i] for i in picks]
     obs   = torch.stack([it["obs"] for it in items]).to(device)
     t_rel = torch.stack([it["t_rel"] for it in items]).to(device)
     preds = euler_sample(model, obs, t_rel, n_samples=n_samples,
                          n_steps=n_steps, device=str(device))           # (K, n, 43, 6) normalized
-    mean, std = test_ds.stats["feature_mean"][:2], test_ds.stats["feature_std"][:2]
-    return preds[..., :2].cpu().numpy() * std + mean
+    mean, std = test_ds.stats["feature_mean"], test_ds.stats["feature_std"]
+    return preds.cpu().numpy() * std + mean
 
 
 def main():
@@ -68,11 +69,11 @@ def main():
     windows = [test_ds.indices[i] for i in picks]           # window index in the .nc file
     print(f"Windows: {windows}")
 
-    mean, std = test_ds.stats["feature_mean"][:2], test_ds.stats["feature_std"][:2]
+    mean, std = test_ds.stats["feature_mean"], test_ds.stats["feature_std"]
     rows = []
     for w, i in zip(windows, picks):                        # true futures, labelled future 0
-        true_xy = test_ds[i]["fut"][:, :2].numpy() * std + mean
-        rows += [("ground_truth", w, 0, s + 1, x, y) for s, (x, y) in enumerate(true_xy)]
+        true_fut = test_ds[i]["fut"].numpy() * std + mean
+        rows += [("ground_truth", w, 0, s + 1, *feats) for s, feats in enumerate(true_fut)]
 
     for folder in folders:
         print(f"\n=== {folder} ===")
@@ -86,14 +87,15 @@ def main():
                                  ckpt_steps or args.n_steps, device)
         for k in range(futures.shape[0]):
             for j, w in enumerate(windows):
-                rows += [(name, w, k + 1, s + 1, x, y) for s, (x, y) in enumerate(futures[k, j])]
+                rows += [(name, w, k + 1, s + 1, *feats) for s, feats in enumerate(futures[k, j])]
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     with open(out, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["model", "window", "future", "step", "x_m", "y_m"])
-        writer.writerows((m, w, k, s, f"{x:.1f}", f"{y:.1f}") for m, w, k, s, x, y in rows)
+        writer.writerow(["model", "window", "future", "step",
+                         "x_m", "y_m", "z_m", "vx_ms", "vy_ms", "vz_ms"])
+        writer.writerows((m, w, k, s, *(f"{v:.1f}" for v in feats)) for m, w, k, s, *feats in rows)
     print(f"\nSaved {len(rows):,} rows to {out}")
 
 
