@@ -127,7 +127,9 @@ class AdaLNBlock_GRU(nn.Module):
         self.norm1 = nn.LayerNorm(d_model, elementwise_affine=False)
         self.norm2 = nn.LayerNorm(d_model, elementwise_affine=False)
 
-        self.gru = nn.GRU(d_model, d_model, bias=False, dropout=dropout)
+        # batch_first: input is (B, T, d_model). Unidirectional, so obs tokens (which come
+        # first) never see future tokens, same as the attention mask.
+        self.gru = nn.GRU(d_model, d_model, bias=False, batch_first=True)
 
         # Feedforward: SwiGLU with hidden width ff_expansion * d_model
         self.ff = SwiGLU(d_model, expansion=ff_expansion, bias=False)
@@ -156,7 +158,7 @@ class AdaLNBlock_GRU(nn.Module):
 
         # Attention with AdaLN
         h = self.norm1(x) * (1 + s1) + b1
-        _, gru_out = self.gru(h)
+        gru_out, _ = self.gru(h)              # output at every step: (B, T, d_model)
         x = x + gru_out                       # hint: residual connection
 
         # Feedforward with AdaLN

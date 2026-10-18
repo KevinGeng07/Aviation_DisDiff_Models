@@ -42,7 +42,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from DataLoaders.ADSBdataset import get_dataloaders
-from models.SWI_DiT import TrajectoryDiT
+from models.registry import build_model
 from models.cfm import euler_sample
 from training.turn_weighting import turn_angle
 
@@ -116,7 +116,7 @@ def load_model(folder, ckpt_name, device):
     else:
         sys.exit(f"No student_config.json next to {ckpt_path} and none stored in the checkpoint")
 
-    model = TrajectoryDiT(**cfg["model"]).to(device)
+    model = build_model(cfg).to(device)
     model.load_state_dict(ckpt.get("ema_state") or ckpt["model_state"])   # EMA weights, like training's val
     model.eval()
 

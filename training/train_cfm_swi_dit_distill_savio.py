@@ -76,7 +76,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from DataLoaders.ADSBdataset import get_dataloaders
-from models.SWI_DiT import TrajectoryDiT
+from models.registry import build_model
 from models.cfm import sample_flow_time, forward_cfm, euler_sample
 from training.turn_weighting import turn_weights, feature_stats
 
@@ -299,7 +299,7 @@ def validate_kl(student, teacher, val_loader, device, feat_std, seed,
 
 
 def load_teacher(teacher_cfg, teacher_ckpt, device):
-    teacher = TrajectoryDiT(**teacher_cfg["model"]).to(device)
+    teacher = build_model(teacher_cfg).to(device)
     ckpt    = torch.load(teacher_ckpt, map_location=device, weights_only=False)
     state   = ckpt.get("ema_state") or ckpt.get("model_state")
     teacher.load_state_dict(state)
@@ -381,9 +381,9 @@ def train(
           f"| {teacher_cfg['model']} | {sum(p.numel() for p in teacher.parameters()):,} params")
 
     # ── Student ───────────────────────────────────────────────────────────
-    model = TrajectoryDiT(**student_cfg["model"]).to(device)
+    model = build_model(student_cfg).to(device)
     ema   = EMA(model, decay=0.9999)
-    print(f"Student: {student_cfg['model']} | {sum(p.numel() for p in model.parameters()):,} params")
+    print(f"Student: {student_cfg.get('arch', 'swi_dit')} {student_cfg['model']} | {sum(p.numel() for p in model.parameters()):,} params")
 
     optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     scheduler = CosineAnnealingLR(optimizer, T_max=epochs)

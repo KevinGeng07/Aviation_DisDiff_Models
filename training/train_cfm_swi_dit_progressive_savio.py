@@ -64,7 +64,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from DataLoaders.ADSBdataset import get_dataloaders
-from models.SWI_DiT import TrajectoryDiT
+from models.registry import build_model
 from models.cfm import forward_cfm, euler_sample
 from eval.evaluate import load_checkpoint
 from training.turn_weighting import turn_weights, feature_stats
@@ -130,7 +130,7 @@ def load_model_spec(spec, config_path, ckpt_name, device):
     else:
         sys.exit(f"No architecture for {ckpt_path}: pass a config JSON")
 
-    model = TrajectoryDiT(**cfg["model"]).to(device)
+    model = build_model(cfg).to(device)
     model.load_state_dict(ckpt.get("ema_state") or ckpt["model_state"])
     model.eval()
     model.requires_grad_(False)
@@ -140,7 +140,7 @@ def load_model_spec(spec, config_path, ckpt_name, device):
 
 
 def frozen_copy(cfg, state, device):
-    model = TrajectoryDiT(**cfg["model"]).to(device)
+    model = build_model(cfg).to(device)
     model.load_state_dict(state)
     model.eval()
     model.requires_grad_(False)
@@ -235,7 +235,7 @@ def train_round(teacher, student_cfg, init_state, teacher_steps, student_steps,
         json.dump(student_cfg, f, indent=2)
     metrics_path = round_dir / "metrics.csv"
 
-    model = TrajectoryDiT(**student_cfg["model"]).to(device)
+    model = build_model(student_cfg).to(device)
     model.load_state_dict(init_state)              # student starts as a copy of the teacher
     ema   = EMA(model, decay=args.ema_decay)
 
