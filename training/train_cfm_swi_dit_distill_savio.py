@@ -29,6 +29,11 @@ alpha would not set their relative weight. Each is therefore normalized by
 s_gt / s_kd, an EMA of its own recent (detached) value, so both terms are ~1
 and alpha sets their real share of the gradient: 0.7 ground truth, 0.3 teacher.
 
+--turn_weight S (default 0 = off) also weights each window by how much its true
+future turns (training/turn_weighting.py): a window turning >= 90° counts (1 + S)×
+a straight one in both terms, with the batch mean weight kept at 1. Validation
+losses stay unweighted so they compare across runs.
+
 Per-epoch metrics (printed and appended to <output_dir>/metrics.csv), all for
 the EMA student unless noted:
     train_loss, train_loss_gt, train_loss_kd   averaged over the epoch (raw student);
@@ -73,6 +78,7 @@ sys.path.insert(0, str(ROOT))
 from DataLoaders.ADSBdataset import get_dataloaders
 from models.SWI_DiT import TrajectoryDiT
 from models.cfm import sample_flow_time, forward_cfm, euler_sample
+from training.turn_weighting import turn_weights, feature_stats
 
 CHECKPOINT_DIR = ROOT / "training" / "checkpoints"
 
@@ -147,13 +153,17 @@ class LossNormalizer:
         return loss / (self.scale + self.eps)
 
 
-def weighted_mse(pred, target):
-    """Standard CFM loss weighting: last quarter of the future horizon ×2."""
+def weighted_mse(pred, target, sample_w=None):
+    """Standard CFM loss weighting: last quarter of the future horizon ×2.
+    sample_w: optional (B,) per-window weights with mean 1 (e.g. turn_weights)."""
     fut_len = pred.shape[1]
     weights = torch.ones(fut_len, device=pred.device)
     weights[-fut_len // 4:] = 2.0
     loss_plain = nn.functional.mse_loss(pred, target, reduction="none")
-    return (loss_plain * weights[None, :, None]).mean()
+    loss_plain = loss_plain * weights[None, :, None]
+    if sample_w is not None:
+        loss_plain = loss_plain * sample_w[:, None, None]
+    return loss_plain.mean()
 
 
 def gaussian_kl(mu_p, cov_p, mu_q, cov_q):
@@ -320,6 +330,7 @@ def train(
     grad_clip      = 1.0,
     warmup_steps   = 1000,
     alpha          = 0.7,
+    turn_weight    = 0.0,
     seed           = 42,
     kl_samples     = 20,
     kl_batches     = 5,
@@ -346,7 +357,7 @@ def train(
     device = torch.device(device if torch.cuda.is_available() else "cpu")
     print(f"Training on {device} — CFM + SWI_DiT distillation "
           f"({teacher_cfg.get('name', 'teacher')} → {student_cfg.get('name', 'student')}, "
-          f"alpha={alpha}, seed={seed})")
+          f"alpha={alpha}, turn_weight={turn_weight}, seed={seed})")
 
     # seed controls the aircraft-level train/val/test split
     # default: one DataLoader worker per CPU Slurm gave the job (falls back to 4 off-cluster)
@@ -362,6 +373,7 @@ def train(
     ds       = nc.Dataset(nc_path, "r")
     feat_std = np.array(ds.feature_std)
     ds.close()
+    feat_mean_t, feat_std_t = feature_stats(train_loader, device)   # for turn weights
 
     # ── Teacher (frozen) ──────────────────────────────────────────────────
     teacher, teacher_epoch, teacher_ckpt_fde = load_teacher(teacher_cfg, teacher_ckpt, device)
@@ -379,6 +391,7 @@ def train(
     train_config = {
         "teacher_ckpt": str(teacher_ckpt),
         "alpha":        alpha,
+        "turn_weight":  turn_weight,
         "seed":         seed,
         "subset":       subset,
         "batch_size":   batch_size,
@@ -432,8 +445,9 @@ def train(
             with torch.no_grad():
                 v_teacher = teacher(obs, x_t, t, t_rel)
 
-            loss_gt = weighted_mse(v_pred, v_tgt)
-            loss_kd = weighted_mse(v_pred, v_teacher)
+            sample_w = turn_weights(obs, fut, feat_mean_t, feat_std_t, turn_weight)
+            loss_gt  = weighted_mse(v_pred, v_tgt, sample_w)
+            loss_kd  = weighted_mse(v_pred, v_teacher, sample_w)
 
             # Normalize each term by its running size, then weight
             norm_gt.update(loss_gt)
@@ -559,6 +573,9 @@ if __name__ == "__main__":
     parser.add_argument("--alpha", type=float, default=0.7,
                          help="Weight on the normalized ground-truth CFM loss; (1 - alpha) goes to "
                               "the normalized teacher-matching loss")
+    parser.add_argument("--turn_weight", type=float, default=0.0,
+                         help="Extra loss weight for turning windows: a window turning >= 90 deg "
+                              "counts (1 + turn_weight)x a straight one (0 = off)")
     parser.add_argument("--seed", type=int, default=42,
                          help="Seeds the train/val/test split and all RNGs")
     parser.add_argument("--kl_samples", type=int, default=20,
@@ -582,6 +599,7 @@ if __name__ == "__main__":
         epochs         = args.epochs,
         batch_size     = args.batch_size,
         alpha          = args.alpha,
+        turn_weight    = args.turn_weight,
         seed           = args.seed,
         kl_samples     = args.kl_samples,
         kl_batches     = args.kl_batches,

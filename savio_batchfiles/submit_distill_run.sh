@@ -6,10 +6,11 @@
 #
 # Usage (on Savio, from anywhere):
 #   bash savio_batchfiles/submit_distill_run.sh --name NAME --student CONFIG \
-#        [--alpha 0.7] [--epochs 100] [--batch_size 256] [--seed 42] [--resume]
+#        [--alpha 0.7] [--turn_weight 0] [--epochs 100] [--batch_size 256] [--seed 42] [--resume]
 #
 #   --name     unique run name → job name, logs/NAME_<jobid>.out, training/checkpoints/NAME/
 #   --student  student config JSON (path relative to the repo, e.g. configs/students/swi_dit_2L_256.json)
+#   --turn_weight  extra loss weight for turning windows (>= 90 deg turn counts 1 + this; 0 = off)
 #   --resume   continue an existing run of the same NAME from its last.pt
 #
 # Example:
@@ -22,13 +23,14 @@ REPO=$(cd "$(dirname "$0")/.." && pwd)
 cd "$REPO"
 mkdir -p logs        # Slurm writes logs/ relative to the submit directory
 
-NAME=""; STUDENT=""; ALPHA=0.7; EPOCHS=100; BATCH_SIZE=256; SEED=42; RESUME=0
+NAME=""; STUDENT=""; ALPHA=0.7; TURN_WEIGHT=0; EPOCHS=100; BATCH_SIZE=256; SEED=42; RESUME=0
 usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
 while [ $# -gt 0 ]; do
     case "$1" in
         --name)       NAME="$2"; shift 2 ;;
         --student)    STUDENT="$2"; shift 2 ;;
         --alpha)      ALPHA="$2"; shift 2 ;;
+        --turn_weight) TURN_WEIGHT="$2"; shift 2 ;;
         --epochs)     EPOCHS="$2"; shift 2 ;;
         --batch_size) BATCH_SIZE="$2"; shift 2 ;;
         --seed)       SEED="$2"; shift 2 ;;
@@ -55,7 +57,7 @@ if squeue -h -u "$USER" -n "$NAME" 2>/dev/null | grep -q .; then
     exit 1
 fi
 
-echo "Submitting $NAME | student=$STUDENT | alpha=$ALPHA | epochs=$EPOCHS | batch=$BATCH_SIZE | seed=$SEED | resume=$RESUME"
+echo "Submitting $NAME | student=$STUDENT | alpha=$ALPHA | turn_weight=$TURN_WEIGHT | epochs=$EPOCHS | batch=$BATCH_SIZE | seed=$SEED | resume=$RESUME"
 sbatch --job-name="$NAME" \
-       --export=ALL,RUN_NAME="$NAME",STUDENT_CONFIG="$STUDENT",ALPHA="$ALPHA",EPOCHS="$EPOCHS",BATCH_SIZE="$BATCH_SIZE",SEED="$SEED" \
+       --export=ALL,RUN_NAME="$NAME",STUDENT_CONFIG="$STUDENT",ALPHA="$ALPHA",TURN_WEIGHT="$TURN_WEIGHT",EPOCHS="$EPOCHS",BATCH_SIZE="$BATCH_SIZE",SEED="$SEED" \
        savio_batchfiles/CFMSwiDITDistillSavio.sh

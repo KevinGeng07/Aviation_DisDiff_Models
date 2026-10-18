@@ -52,9 +52,10 @@ START_STEPS=${START_STEPS:-32}
 MIN_STEPS=${MIN_STEPS:-1}
 BATCH_SIZE=${BATCH_SIZE:-256}
 SEED=${SEED:-42}
+TURN_WEIGHT=${TURN_WEIGHT:-0}     # extra loss weight for turning windows (0 = off)
 OUTPUT_DIR=$REPO/training/checkpoints/$RUN_NAME
 
-echo "Run: $RUN_NAME | base: $BASE | lr=$LR (floor ×$MIN_LR_FRAC) | epochs/round=$EPOCHS_PER_ROUND | steps $START_STEPS → $MIN_STEPS | batch=$BATCH_SIZE | seed=$SEED"
+echo "Run: $RUN_NAME | base: $BASE | lr=$LR (floor ×$MIN_LR_FRAC) | epochs/round=$EPOCHS_PER_ROUND | steps $START_STEPS → $MIN_STEPS | batch=$BATCH_SIZE | seed=$SEED | turn_weight=$TURN_WEIGHT"
 echo "Output: $OUTPUT_DIR"
 
 mkdir -p $OUTPUT_DIR
@@ -88,7 +89,8 @@ $PYTHON -u training/train_cfm_swi_dit_progressive_savio.py \
     --start_steps $START_STEPS \
     --min_steps $MIN_STEPS \
     --batch_size $BATCH_SIZE \
-    --seed $SEED
+    --seed $SEED \
+    --turn_weight $TURN_WEIGHT
 STATUS=$?
 
 echo "Job finished at $(date) with exit code $STATUS"

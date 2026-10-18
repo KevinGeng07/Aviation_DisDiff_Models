@@ -22,7 +22,10 @@ Errors are distances in metres between predicted and true (x, y) positions:
     min  = error of the best of the K samples           (did ANY sample get it right)
     avg  = error averaged over the K samples            (how good is a typical sample)
 
-So you get minADE, minFDE, avgADE, avgFDE, each averaged over all test windows.
+So you get minADE, minFDE, avgADE, avgFDE, each averaged over all test windows,
+and minFDE_turn / avgFDE_turn: the same over only the windows whose true future
+turns >= --turn_deg (default 45°) away from the last observed heading
+(training/turn_weighting.py), since that is where the models under-turn.
 """
 import argparse
 import io
@@ -41,6 +44,7 @@ sys.path.insert(0, str(ROOT))
 from DataLoaders.ADSBdataset import get_dataloaders
 from models.SWI_DiT import TrajectoryDiT
 from models.cfm import euler_sample
+from training.turn_weighting import turn_angle
 
 def find_run_folders(ckpt_name):
     """Every folder in finished_ckpt/ holding ckpt_name (or split pieces of it) — one per model."""
@@ -122,10 +126,14 @@ def load_model(folder, ckpt_name, device):
     return model, seed, ckpt.get("n_steps")   # n_steps: set by progressive distillation
 
 
-def evaluate(model, test_loader, feat_std, device, n_samples, n_steps, max_batches):
-    std_xy = torch.tensor(feat_std[:2], device=device, dtype=torch.float32)
-    totals = {"minADE": 0.0, "minFDE": 0.0, "avgADE": 0.0, "avgFDE": 0.0}
-    n_windows = 0
+def evaluate(model, test_loader, feat_mean, feat_std, device, n_samples, n_steps, max_batches,
+             turn_deg=45.0):
+    mean_t = torch.tensor(feat_mean, device=device, dtype=torch.float32)
+    std_t  = torch.tensor(feat_std,  device=device, dtype=torch.float32)
+    std_xy = std_t[:2]
+    totals = {"minADE": 0.0, "minFDE": 0.0, "avgADE": 0.0, "avgFDE": 0.0,
+              "minFDE_turn": 0.0, "avgFDE_turn": 0.0}
+    n_windows = n_turn = 0
 
     with torch.no_grad():
         for b, batch in enumerate(test_loader):
@@ -151,11 +159,17 @@ def evaluate(model, test_loader, feat_std, device, n_samples, n_steps, max_batch
             totals["avgADE"] += ade.mean(dim=0).sum().item()
             totals["avgFDE"] += fde.mean(dim=0).sum().item()
             n_windows += obs.shape[0]
+
+            turning = turn_angle(obs, fut, mean_t, std_t) >= turn_deg     # (B,)
+            totals["minFDE_turn"] += fde.min(dim=0).values[turning].sum().item()
+            totals["avgFDE_turn"] += fde.mean(dim=0)[turning].sum().item()
+            n_turn += turning.sum().item()
             print(f"  batch {b + 1}/{len(test_loader)} | running minFDE "
                   f"{totals['minFDE'] / n_windows:.1f}m", end="\r", flush=True)
 
     print()
-    return {k: v / n_windows for k, v in totals.items()}, n_windows
+    return {k: v / (max(n_turn, 1) if k.endswith("_turn") else n_windows)
+            for k, v in totals.items()}, n_windows, n_turn
 
 
 def main(device=None):
@@ -170,6 +184,8 @@ def main(device=None):
     parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--max_batches", type=int, default=None, help="limit for a quick check")
     parser.add_argument("--num_workers", type=int, default=2)
+    parser.add_argument("--turn_deg", type=float, default=45.0,
+                        help="windows turning at least this much count for the *_turn metrics")
     parser.add_argument("--out", default=None, help="also save the results to this JSON file")
     args = parser.parse_args()
 
@@ -183,7 +199,8 @@ def main(device=None):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
     ds = nc.Dataset(args.nc_path, "r")
-    feat_std = np.array(ds.feature_std)
+    feat_mean = np.array(ds.feature_mean)
+    feat_std  = np.array(ds.feature_std)
     ds.close()
 
     test_loaders = {}   # one per training seed; the seed decides the aircraft-level split
@@ -197,23 +214,25 @@ def main(device=None):
                                                        seed=seed, num_workers=args.num_workers)
 
         torch.manual_seed(0)   # same sampling noise for every model → comparable numbers
-        results, n = evaluate(model, test_loaders[seed], feat_std, device,
-                              args.n_samples, ckpt_steps or args.n_steps, args.max_batches)
+        results, n, n_turn = evaluate(model, test_loaders[seed], feat_mean, feat_std, device,
+                                      args.n_samples, ckpt_steps or args.n_steps,
+                                      args.max_batches, args.turn_deg)
         all_results[model_name(folder, ckpt_steps)] = results
         for name, value in results.items():
             print(f"  {name}: {value:8.1f} m")
 
     # side-by-side summary
-    print(f"\nTest set: {n:,} windows | K={args.n_samples} samples | {args.n_steps} Euler steps (progressive: own) | metres")
+    print(f"\nTest set: {n:,} windows ({n_turn:,} turning >= {args.turn_deg:g}°) | K={args.n_samples} samples | {args.n_steps} Euler steps (progressive: own) | metres")
     names = list(next(iter(all_results.values())))
     width = max(len(k) for k in all_results) + 2
-    print("model".ljust(width) + "".join(f"{m:>10}" for m in names))
+    print("model".ljust(width) + "".join(f"{m:>13}" for m in names))
     for model_name, results in all_results.items():
-        print(model_name.ljust(width) + "".join(f"{results[m]:10.1f}" for m in names))
+        print(model_name.ljust(width) + "".join(f"{results[m]:13.1f}" for m in names))
 
     if args.out:
-        settings = {k: getattr(args, k) for k in ("ckpt", "n_samples", "n_steps", "max_batches", "nc_path")}
-        payload = {"settings": settings, "n_windows": n, "results_m": all_results}
+        settings = {k: getattr(args, k) for k in ("ckpt", "n_samples", "n_steps", "max_batches",
+                                                  "turn_deg", "nc_path")}
+        payload = {"settings": settings, "n_windows": n, "n_turning": n_turn, "results_m": all_results}
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
         Path(args.out).write_text(json.dumps(payload, indent=2))
         print(f"\nSaved results to {args.out}")

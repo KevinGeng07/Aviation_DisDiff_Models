@@ -50,10 +50,11 @@ ALPHA=${ALPHA:-0.7}
 EPOCHS=${EPOCHS:-100}
 BATCH_SIZE=${BATCH_SIZE:-256}
 SEED=${SEED:-42}
+TURN_WEIGHT=${TURN_WEIGHT:-0}     # extra loss weight for turning windows (0 = off)
 # one output folder per run: runs must never share last.pt / best.pt / metrics.csv
 OUTPUT_DIR=$REPO/training/checkpoints/$RUN_NAME
 
-echo "Run: $RUN_NAME | student: $STUDENT_CONFIG | alpha=$ALPHA | epochs=$EPOCHS | batch=$BATCH_SIZE | seed=$SEED"
+echo "Run: $RUN_NAME | student: $STUDENT_CONFIG | alpha=$ALPHA | epochs=$EPOCHS | batch=$BATCH_SIZE | seed=$SEED | turn_weight=$TURN_WEIGHT"
 echo "Output: $OUTPUT_DIR"
 [ -f "$STUDENT_CONFIG" ] || { echo "Student config not found: $STUDENT_CONFIG"; exit 1; }
 
@@ -93,7 +94,8 @@ $PYTHON -u train_cfm_swi_dit_distill_savio.py \
     --epochs $EPOCHS \
     --batch_size $BATCH_SIZE \
     --alpha $ALPHA \
-    --seed $SEED
+    --seed $SEED \
+    --turn_weight $TURN_WEIGHT
 STATUS=$?
 
 echo "Job finished at $(date) with exit code $STATUS"

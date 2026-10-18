@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from DataLoaders.ADSBdataset import get_dataloaders
 from models.SWI_DiT import TrajectoryDiT
 from models.cfm import sample_flow_time, forward_cfm, euler_sample
+from training.turn_weighting import turn_weights, feature_stats
 
 CHECKPOINT_DIR = Path(__file__).resolve().parent / "checkpoints"
 
@@ -74,6 +75,7 @@ def train(
     d_model      = 256,
     n_heads      = 8,
     n_layers     = 6,
+    turn_weight  = 0.0,
     device       = "cuda",
     subset       = None,
 ):
@@ -90,6 +92,7 @@ def train(
     ds       = nc.Dataset(nc_path, "r")
     feat_std = np.array(ds.feature_std)
     ds.close()
+    feat_mean_t, feat_std_t = feature_stats(train_loader, device)   # for turn weights
 
     model = TrajectoryDiT(d_model=d_model, n_heads=n_heads, n_layers=n_layers).to(device)
     ema   = EMA(model, decay=0.9999)
@@ -130,7 +133,11 @@ def train(
             loss_plain = nn.functional.mse_loss(v_pred, v_tgt, reduction="none")
             weights    = torch.ones(fut_len, device=device)
             weights[-fut_len // 4:] = 2.0
-            loss = (loss_plain * weights[None, :, None]).mean()
+            loss_plain = loss_plain * weights[None, :, None]
+            sample_w   = turn_weights(obs, fut, feat_mean_t, feat_std_t, turn_weight)
+            if sample_w is not None:                 # turning windows count more
+                loss_plain = loss_plain * sample_w[:, None, None]
+            loss = loss_plain.mean()
 
             optimizer.zero_grad()
             loss.backward()
@@ -196,6 +203,9 @@ if __name__ == "__main__":
     parser.add_argument("--n_layers", type=int, default=6)
     parser.add_argument("--subset", type=int, default=None,
                          help="Limit to N samples; omit for the full dataset")
+    parser.add_argument("--turn_weight", type=float, default=0.0,
+                         help="Extra loss weight for turning windows: a window turning >= 90 deg "
+                              "counts (1 + turn_weight)x a straight one (0 = off)")
     args = parser.parse_args()
 
     train(
@@ -206,4 +216,5 @@ if __name__ == "__main__":
         d_model    = args.d_model,
         n_layers   = args.n_layers,
         subset     = args.subset,
+        turn_weight = args.turn_weight,
     )

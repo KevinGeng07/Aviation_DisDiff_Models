@@ -24,6 +24,8 @@ Per-round loss, on the student's time grid t ∈ {0, 1/N, ..., (N-1)/N}
     L        = weighted_mse(student(obs, x_t, t, t_rel), v_tgt)
 
 so one student Euler step of size 2dt lands exactly where two teacher steps do.
+--turn_weight S (default 0 = off) weights each window by how much its true future
+turns, as in train_cfm_swi_dit_distill_savio.py (training/turn_weighting.py).
 
 Selecting a model (--base, and --teacher for an optional different round-1 teacher):
 
@@ -65,6 +67,7 @@ from DataLoaders.ADSBdataset import get_dataloaders
 from models.SWI_DiT import TrajectoryDiT
 from models.cfm import forward_cfm, euler_sample
 from eval.evaluate import load_checkpoint
+from training.turn_weighting import turn_weights, feature_stats
 from training.train_cfm_swi_dit_distill_savio import (
     EMA, set_seed, resolve_path, load_config, weighted_mse,
 )
@@ -242,6 +245,7 @@ def train_round(teacher, student_cfg, init_state, teacher_steps, student_steps,
     scheduler = CosineAnnealingLR(optimizer, T_max=max(1, args.epochs_per_round - 1),
                                   eta_min=args.lr * args.min_lr_frac)
     dt        = 0.5 / student_steps                # teacher step size
+    feat_mean_t, feat_std_t = feature_stats(train_loader, device)   # for turn weights
 
     start_epoch, global_step, best_fde = 0, 0, float("inf")
     last_ckpt = round_dir / "last.pt"
@@ -281,7 +285,8 @@ def train_round(teacher, student_cfg, init_state, teacher_steps, student_steps,
             with torch.no_grad():
                 v_tgt = two_step_target(teacher, obs, x_t, t, t_rel, dt)
 
-            loss = weighted_mse(model(obs, x_t, t, t_rel), v_tgt)
+            sample_w = turn_weights(obs, fut, feat_mean_t, feat_std_t, args.turn_weight)
+            loss     = weighted_mse(model(obs, x_t, t, t_rel), v_tgt, sample_w)
             optimizer.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
@@ -382,7 +387,8 @@ def main(args):
     else:
         teacher, teacher_ckpt = base_model, base_ckpt
         print("Round-1 teacher: the base model")
-    run_info = {"base_ckpt": str(base_ckpt), "round1_teacher_ckpt": str(teacher_ckpt)}
+    run_info = {"base_ckpt": str(base_ckpt), "round1_teacher_ckpt": str(teacher_ckpt),
+                "turn_weight": args.turn_weight}
 
     for teacher_steps, student_steps in round_schedule(args.start_steps, args.min_steps):
         round_dir = output_dir / f"steps_{student_steps:02d}"
@@ -435,6 +441,9 @@ if __name__ == "__main__":
     parser.add_argument("--warmup_steps", type=int, default=250,
                         help="Linear LR warmup at the start of every round")
     parser.add_argument("--ema_decay", type=float, default=0.999)
+    parser.add_argument("--turn_weight", type=float, default=0.0,
+                        help="Extra loss weight for turning windows: a window turning >= 90 deg "
+                             "counts (1 + turn_weight)x a straight one (0 = off)")
     parser.add_argument("--seed", type=int, default=42,
                         help="Seeds the train/val/test split and all RNGs (keep 42 to match the base run)")
     parser.add_argument("--log_every", type=int, default=500)
