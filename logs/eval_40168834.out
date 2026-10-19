@@ -1,0 +1,1 @@
+Script: eval/evaluate.py | folders: finished_ckpt/6_2_256_Progressive finished_ckpt/6_4_256_GRU_TURN1 finished_ckpt/6_4_256_TURN1 | extra args: --out eval/results_turn.json
