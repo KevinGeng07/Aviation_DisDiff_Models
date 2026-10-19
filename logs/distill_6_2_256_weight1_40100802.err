@@ -1,0 +1,3 @@
+/global/home/users/kevingeng/.conda/envs/adsb/lib/python3.11/site-packages/torch/nn/modules/rnn.py:1440: UserWarning: RNN module weights are not part of single contiguous chunk of memory. This means they need to be compacted at every call, possibly greatly increasing memory usage. To compact weights again call flatten_parameters(). (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/cudnn/RNN.cpp:1481.)
+  result = _VF.gru(
+[2026-10-19T07:05:52.094] error: *** JOB 40100802 ON n0161.savio3 CANCELLED AT 2026-10-19T07:05:52 DUE TO TIME LIMIT ***
