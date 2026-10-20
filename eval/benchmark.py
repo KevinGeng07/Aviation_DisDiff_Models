@@ -35,7 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from DataLoaders.ADSBdataset import get_dataloaders
 from models.cfm import euler_sample
-from evaluate import load_model, evaluate, model_name
+from evaluate import load_model, evaluate, model_name, find_run_folders
 
 
 def sample_latency(model, test_loader, device, n_steps, n_runs, n_warmup=20):
@@ -84,6 +84,8 @@ def main():
     missing = [str(f) for f in folders if not f.is_dir()]
     if missing:
         sys.exit("Folder(s) not found: " + ", ".join(missing))
+    # a parent folder holding several checkpoints (e.g. every progressive round) → one entry each
+    folders = [run for f in folders for run in (find_run_folders(args.ckpt, f) or [f])]
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     gpu = torch.cuda.get_device_name(0) if device.type == "cuda" else "CPU"

@@ -46,11 +46,10 @@ from models.registry import build_model
 from models.cfm import euler_sample
 from training.turn_weighting import turn_angle
 
-def find_run_folders(ckpt_name):
-    """Every folder in finished_ckpt/ holding ckpt_name (or split pieces of it) — one per model."""
+def find_run_folders(ckpt_name, root=ROOT / "finished_ckpt"):
+    """Every folder under root holding ckpt_name (or split pieces of it) — one per model."""
     stem  = Path(ckpt_name).stem
-    found = [*(ROOT / "finished_ckpt").rglob(ckpt_name),
-             *(ROOT / "finished_ckpt").rglob(f"{stem}_0.pt")]
+    found = [*Path(root).rglob(ckpt_name), *Path(root).rglob(f"{stem}_0.pt")]
     return sorted({p.parent for p in found})
 
 
@@ -194,6 +193,8 @@ def main(device=None):
     missing = [str(f) for f in folders if not Path(f).is_dir()]
     if missing:
         sys.exit("Folder(s) not found: " + ", ".join(missing))
+    # a parent folder holding several checkpoints (e.g. every progressive round) → one entry each
+    folders = [run for f in folders for run in (find_run_folders(args.ckpt, f) or [f])]
 
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
