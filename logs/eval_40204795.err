@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "/global/scratch/users/kevingeng/aviation-bayen/AviationDiffusionModelsKishore/eval/evaluate.py", line 242, in <module>
+    main()
+  File "/global/scratch/users/kevingeng/aviation-bayen/AviationDiffusionModelsKishore/eval/evaluate.py", line 220, in main
+    all_results[model_name(folder, ckpt_steps)] = results
+                ^^^^^^^^^^
+UnboundLocalError: cannot access local variable 'model_name' where it is not associated with a value
