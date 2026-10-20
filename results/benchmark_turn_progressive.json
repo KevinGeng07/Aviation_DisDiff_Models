@@ -1,0 +1,44 @@
+{
+  "settings": {
+    "ckpt": "best.pt",
+    "n_samples": 20,
+    "n_steps": 20,
+    "n_runs": 1000,
+    "max_batches": null,
+    "nc_path": "/global/scratch/users/kevingeng/aviation-bayen/data/trajectories_adsblol_seq86_stage2.nc"
+  },
+  "device": "NVIDIA GeForce RTX 2080 Ti",
+  "n_windows": 76192,
+  "results": {
+    "6_4_256_TURN1": {
+      "minADE": 274.8915897451094,
+      "minFDE": 498.15111653577475,
+      "avgADE": 970.8130502136052,
+      "avgFDE": 2354.938668306712,
+      "params": 5016838.0,
+      "lat_mean_ms": 98.11977460235357,
+      "lat_median_ms": 98.07986300438643,
+      "lat_p95_ms": 98.35842065513134
+    },
+    "6_2_256_GRU_TURN1": {
+      "minADE": 267.15697001489656,
+      "minFDE": 484.0821308647069,
+      "avgADE": 952.8324476528047,
+      "avgFDE": 2324.3028250177185,
+      "params": 5803270.0,
+      "lat_mean_ms": 125.96066092140973,
+      "lat_median_ms": 125.89147221297026,
+      "lat_p95_ms": 126.4110142365098
+    },
+    "6_4_256_Progressive_1step": {
+      "minADE": 478.0431876152516,
+      "minFDE": 599.6015200496771,
+      "avgADE": 1141.8294551101164,
+      "avgFDE": 2513.7020910167735,
+      "params": 5016838.0,
+      "lat_mean_ms": 4.263931542634964,
+      "lat_median_ms": 4.256404936313629,
+      "lat_p95_ms": 4.297344293445349
+    }
+  }
+}
