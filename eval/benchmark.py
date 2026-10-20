@@ -5,10 +5,16 @@ Usage (on Savio, from the repo root):
     SCRIPT=benchmark sbatch savio_batchfiles/EvalSavio.sh                      # the 7 *_SWiDiT students
     SCRIPT=benchmark sbatch savio_batchfiles/EvalSavio.sh finished_ckpt/6_4_256_SWiDiT
     SCRIPT=benchmark EVAL_ARGS="--max_batches 10 --out results/benchmark.json" sbatch savio_batchfiles/EvalSavio.sh
+    SCRIPT=benchmark EVAL_ARGS="--n_steps 20 16 8 4 2 1 --out results/benchmark_all.json" \
+        sbatch savio_batchfiles/EvalSavio.sh finished_ckpt/*_SWiDiT finished_ckpt/6_4_256_Progressive
+        # every student at every step count + each progressive round, in one file
 
 For every model:
     minADE, minFDE, avgADE, avgFDE   test-set errors in metres, exactly as eval/evaluate.py
     params                           number of model parameters
+    steps                            Euler steps used; with several --n_steps, each model is
+                                     run once per value and named <model>_<N>step. Progressive
+                                     students always use their own step count, once.
     latency                          time to sample ONE future for ONE test window, run
                                      --n_runs times (default 1000) on that same window;
                                      reported as mean / median / p95 in milliseconds
@@ -64,7 +70,8 @@ def main():
     parser.add_argument("--nc_path", default=str(ROOT / "Data" / "trajectories_adsblol_seq86_stage2.nc"))
     parser.add_argument("--ckpt", default="best.pt", help="best.pt or last.pt")
     parser.add_argument("--n_samples", type=int, default=20, help="K futures per window for ADE/FDE")
-    parser.add_argument("--n_steps", type=int, default=20, help="Euler steps (progressive students use their own)")
+    parser.add_argument("--n_steps", type=int, nargs="+", default=[20],
+                        help="Euler steps; several values run every model at each (progressive students use their own)")
     parser.add_argument("--n_runs", type=int, default=1000, help="timed single-sample runs for latency")
     parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--max_batches", type=int, default=None, help="limit ADE/FDE batches for a quick check")
@@ -91,28 +98,33 @@ def main():
     for folder in folders:
         print(f"\n=== {folder} ===")
         model, seed, ckpt_steps = load_model(folder, args.ckpt, device)
-        n_steps = ckpt_steps or args.n_steps
         if seed not in test_loaders:
             _, _, test_loaders[seed] = get_dataloaders(args.nc_path, batch_size=args.batch_size,
                                                        seed=seed, num_workers=args.num_workers)
 
-        torch.manual_seed(0)   # same sampling noise for every model → comparable numbers
-        metrics, n, _ = evaluate(model, test_loaders[seed], feat_mean, feat_std, device,
-                                 args.n_samples, n_steps, args.max_batches)
-        results = {k: metrics[k] for k in ("minADE", "minFDE", "avgADE", "avgFDE")}
-        results["params"] = sum(p.numel() for p in model.parameters())
-        results.update(sample_latency(model, test_loaders[seed], device, n_steps, args.n_runs))
-        all_results[model_name(folder, ckpt_steps)] = results
-        print("  " + " | ".join(f"{k} {v:,.2f}" for k, v in results.items()))
+        # progressive students only work at their own step count
+        for n_steps in [ckpt_steps] if ckpt_steps else args.n_steps:
+            name = model_name(folder, ckpt_steps or (n_steps if len(args.n_steps) > 1 else None))
+            print(f"--- {name}: {n_steps} Euler steps ---")
+
+            torch.manual_seed(0)   # same sampling noise for every model → comparable numbers
+            metrics, n, _ = evaluate(model, test_loaders[seed], feat_mean, feat_std, device,
+                                     args.n_samples, n_steps, args.max_batches)
+            results = {"steps": n_steps}
+            results.update({k: metrics[k] for k in ("minADE", "minFDE", "avgADE", "avgFDE")})
+            results["params"] = sum(p.numel() for p in model.parameters())
+            results.update(sample_latency(model, test_loaders[seed], device, n_steps, args.n_runs))
+            all_results[name] = results
+            print("  " + " | ".join(f"{k} {v:,.2f}" for k, v in results.items()))
 
     # side-by-side summary
-    print(f"\n{gpu} | test set: {n:,} windows | K={args.n_samples} | {args.n_steps} Euler steps "
+    print(f"\n{gpu} | test set: {n:,} windows | K={args.n_samples} | Euler steps {args.n_steps} "
           f"(progressive: own) | latency: 1 sample, 1 window, {args.n_runs} runs")
-    cols = ["minADE", "minFDE", "avgADE", "avgFDE", "params", "lat_mean_ms", "lat_median_ms", "lat_p95_ms"]
+    cols = ["steps", "minADE", "minFDE", "avgADE", "avgFDE", "params", "lat_mean_ms", "lat_median_ms", "lat_p95_ms"]
     width = max(len(k) for k in all_results) + 2
     print("model".ljust(width) + "".join(f"{c:>15}" for c in cols))
     for name, results in all_results.items():
-        print(name.ljust(width) + "".join(f"{results[c]:15,.0f}" if c == "params" else f"{results[c]:15.2f}"
+        print(name.ljust(width) + "".join(f"{results[c]:15,.0f}" if c in ("params", "steps") else f"{results[c]:15.2f}"
                                           for c in cols))
 
     if args.out:

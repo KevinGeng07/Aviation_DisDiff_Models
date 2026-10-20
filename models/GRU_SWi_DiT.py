@@ -62,6 +62,7 @@ class SwiGLU(nn.Module):
 
         return self.down(gate * up)
 
+
 class AdaLNBlock_Transformer(nn.Module):
     def __init__(self, d_model, n_heads, dropout=0.1, ff_expansion=3):
         super().__init__()
@@ -69,14 +70,12 @@ class AdaLNBlock_Transformer(nn.Module):
         # Layer norms (no affine — AdaLN supplies scale/shift instead)
         self.norm1 = nn.LayerNorm(d_model, elementwise_affine=False)
         self.norm2 = nn.LayerNorm(d_model, elementwise_affine=False)
-        self.norm3 = nn.LayerNorm(d_model, elementwise_affine=False)
 
         # Self attention
         self.attn1 = nn.MultiheadAttention(d_model, n_heads,
                                            dropout=dropout, batch_first=True)
-
         self.attn2 = nn.MultiheadAttention(d_model, n_heads,
-                                            dropout=dropout, batch_first=True)
+                                           dropout=dropout, batch_first=True)
 
         # Feedforward: SwiGLU with hidden width ff_expansion * d_model
         self.ff = SwiGLU(d_model, expansion=ff_expansion, bias=False)
@@ -108,12 +107,11 @@ class AdaLNBlock_Transformer(nn.Module):
         attn_out, _ = self.attn1(h, h, h, attn_mask=mask)
         x = x + attn_out                       # hint: residual connection
 
-        h = self.norm2(x) * (1 + s1) + b1
-        attn_out, _ = self.attn2(h, h, h, attn_mask=mask)
+        attn_out, _ = self.attn2(x, x, x, attn_mask=mask)
         x = x + attn_out
 
         # Feedforward with AdaLN
-        h = self.norm3(x) * (1 + s2) + b2
+        h = self.norm2(x) * (1 + s2) + b2
         x = x + self.ff(h)                     # hint: residual connection
 
         return x
@@ -129,7 +127,7 @@ class AdaLNBlock_GRU(nn.Module):
 
         # batch_first: input is (B, T, d_model). Unidirectional, so obs tokens (which come
         # first) never see future tokens, same as the attention mask.
-        self.gru = nn.GRU(d_model, d_model, bias=False, batch_first=True)
+        self.gru = nn.GRU(d_model, d_model, bias=True, batch_first=True)
 
         # Feedforward: SwiGLU with hidden width ff_expansion * d_model
         self.ff = SwiGLU(d_model, expansion=ff_expansion, bias=False)
@@ -180,7 +178,7 @@ class TrajectoryDiT(nn.Module):
                  n_heads  = 8,
                  n_layers = 2,
                  dropout  = 0.1,
-                 ff_expansion = 3):
+                 ff_expansion = 2):
         super().__init__()
 
         self.obs_len = obs_len
@@ -213,8 +211,8 @@ class TrajectoryDiT(nn.Module):
             block
             for _ in range(n_layers)
             for block in [
-                AdaLNBlock_Transformer(d_model, n_heads, dropout, ff_expansion),
-                AdaLNBlock_GRU(d_model, dropout, ff_expansion)
+                AdaLNBlock_GRU(d_model, dropout, ff_expansion),
+                AdaLNBlock_Transformer(d_model, n_heads, dropout, ff_expansion)   
             ]
         ])
 
