@@ -1,0 +1,71 @@
+{
+  "settings": {
+    "ckpt": "best.pt",
+    "n_samples": 20,
+    "n_steps": [
+      20
+    ],
+    "n_runs": 1000,
+    "max_batches": null,
+    "nc_path": "/global/scratch/users/kevingeng/aviation-bayen/data/trajectories_adsblol_seq86_stage2.nc"
+  },
+  "device": "NVIDIA GeForce RTX 2080 Ti",
+  "n_windows": 76192,
+  "results": {
+    "6_4_256_Progressive_1step": {
+      "steps": 1.0,
+      "minADE": 478.0431876152516,
+      "minFDE": 599.6015200496771,
+      "avgADE": 1141.8294551101164,
+      "avgFDE": 2513.7020910167735,
+      "params": 5016838.0,
+      "lat_mean_ms": 4.200999174267054,
+      "lat_median_ms": 4.198078997433186,
+      "lat_p95_ms": 4.2269413359463215
+    },
+    "6_4_256_Progressive_2step": {
+      "steps": 2.0,
+      "minADE": 360.477491126447,
+      "minFDE": 545.2433740583001,
+      "avgADE": 1050.2743137813025,
+      "avgFDE": 2443.6489612590563,
+      "params": 5016838.0,
+      "lat_mean_ms": 7.976115545257926,
+      "lat_median_ms": 7.9714832827448845,
+      "lat_p95_ms": 8.011140301823616
+    },
+    "6_4_256_Progressive_4step": {
+      "steps": 4.0,
+      "minADE": 310.6974232243871,
+      "minFDE": 522.9437764955638,
+      "avgADE": 1007.69404770596,
+      "avgFDE": 2394.400974265671,
+      "params": 5016838.0,
+      "lat_mean_ms": 16.00131682306528,
+      "lat_median_ms": 15.918896533548832,
+      "lat_p95_ms": 16.511044930666674
+    },
+    "6_4_256_Progressive_8step": {
+      "steps": 8.0,
+      "minADE": 291.06105192105144,
+      "minFDE": 513.222133106166,
+      "avgADE": 989.3440892949719,
+      "avgFDE": 2373.409580402142,
+      "params": 5016838.0,
+      "lat_mean_ms": 30.968379383906722,
+      "lat_median_ms": 30.941917560994625,
+      "lat_p95_ms": 31.075100228190422
+    },
+    "6_4_256_Progressive_16step": {
+      "steps": 16.0,
+      "minADE": 281.5343689195552,
+      "minFDE": 506.77150729202214,
+      "avgADE": 979.5062823401735,
+      "avgFDE": 2361.9642990733937,
+      "params": 5016838.0,
+      "lat_mean_ms": 61.88960202410817,
+      "lat_median_ms": 61.69590912759304,
+      "lat_p95_ms": 62.67388332635164
+    }
+  }
+}
