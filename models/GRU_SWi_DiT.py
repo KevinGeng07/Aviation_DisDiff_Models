@@ -74,8 +74,6 @@ class AdaLNBlock_Transformer(nn.Module):
         # Self attention
         self.attn1 = nn.MultiheadAttention(d_model, n_heads,
                                            dropout=dropout, batch_first=True)
-        self.attn2 = nn.MultiheadAttention(d_model, n_heads,
-                                           dropout=dropout, batch_first=True)
 
         # Feedforward: SwiGLU with hidden width ff_expansion * d_model
         self.ff = SwiGLU(d_model, expansion=ff_expansion, bias=False)
@@ -106,9 +104,6 @@ class AdaLNBlock_Transformer(nn.Module):
         h = self.norm1(x) * (1 + s1) + b1
         attn_out, _ = self.attn1(h, h, h, attn_mask=mask)
         x = x + attn_out                       # hint: residual connection
-
-        attn_out, _ = self.attn2(x, x, x, attn_mask=mask)
-        x = x + attn_out
 
         # Feedforward with AdaLN
         h = self.norm2(x) * (1 + s2) + b2
