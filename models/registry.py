@@ -9,6 +9,7 @@ import importlib
 ARCHS = {
     "swi_dit":     "models.SWI_DiT",
     "gru_swi_dit": "models.GRU_SWi_DiT",
+    "gru_swi_dit_3": "models.GRU_SWi_DiT_3",
 }
 
 
