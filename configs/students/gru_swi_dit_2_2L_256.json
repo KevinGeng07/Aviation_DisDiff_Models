@@ -1,13 +1,13 @@
 {
-  "name": "gru3_swi_dit_1L_student",
-  "arch": "gru_swi_dit_3",
+  "name": "gru_swi_dit_2_2L_256_student",
+  "arch": "gru_swi_dit_2",
   "model": {
     "obs_len": 43,
     "fut_len": 43,
     "in_dim": 6,
     "d_model": 256,
     "n_heads": 8,
-    "n_layers": 1,
+    "n_layers": 2,
     "dropout": 0.1,
     "ff_expansion": 3
   }

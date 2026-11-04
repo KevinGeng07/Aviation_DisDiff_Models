@@ -1,5 +1,5 @@
 {
-  "name": "gru_swi_dit_2L_student",
+  "name": "gru_swi_dit_2L_256_student",
   "arch": "gru_swi_dit",
   "model": {
     "obs_len": 43,
