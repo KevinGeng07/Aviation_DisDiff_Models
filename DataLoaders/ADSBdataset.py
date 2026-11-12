@@ -20,21 +20,21 @@ def load_netcdf(filepath):
     return trajectory, timestamps, icao24, stats
 
 
-def split_by_icao(icao24, train_frac=0.85, val_frac=0.10):
-    # sorted: set order depends on per-process string hashing, which would make
-    # the seeded shuffle (and therefore the split) differ between runs/resumes
-    unique_icao = sorted(set(icao24))
-    np.random.shuffle(unique_icao)
-    n       = len(unique_icao)
-    n_train = int(n * train_frac)
-    n_val   = int(n * val_frac)
-    train_icao = set(unique_icao[:n_train])
-    val_icao   = set(unique_icao[n_train : n_train + n_val])
-    test_icao  = set(unique_icao[n_train + n_val:])
-    train_idx = [i for i, ic in enumerate(icao24) if ic in train_icao]
-    val_idx   = [i for i, ic in enumerate(icao24) if ic in val_icao]
-    test_idx  = [i for i, ic in enumerate(icao24) if ic in test_icao]
-    return train_idx, val_idx, test_idx
+def split_by_icao(icao24, val_frac=0.10, test_frac=0.05, seed=42):
+      """Aircraft-level split identical to ADSBdatasetBase.split_flights /
+  TrajectoryForecastDatasetV3."""
+      flights = np.unique(np.asarray(icao24))
+      np.random.default_rng(seed).shuffle(flights)          # PCG64 Generator, not RandomState
+      n      = len(flights)
+      n_test = int(n * test_frac)
+      n_val  = int(n * val_frac)
+      train_f = set(flights[: n - n_val - n_test])
+      val_f   = set(flights[n - n_val - n_test : n - n_test])
+      test_f  = set(flights[n - n_test :])
+      train_idx = [i for i, ic in enumerate(icao24) if ic in train_f]
+      val_idx   = [i for i, ic in enumerate(icao24) if ic in val_f]
+      test_idx  = [i for i, ic in enumerate(icao24) if ic in test_f]
+      return train_idx, val_idx, test_idx
 
 
 def normalize(trajectory, stats):
@@ -81,7 +81,7 @@ def get_dataloaders(filepath, batch_size=64, obs_len=43, seed=42, subset=None, n
         timestamps = timestamps[:subset]
         icao24     = icao24[:subset]
 
-    train_idx, val_idx, test_idx = split_by_icao(icao24)
+    train_idx, val_idx, test_idx = split_by_icao(icao24, seed=seed)
 
     train_ds = TrajectoryDataset(trajectory, timestamps, train_idx, stats, obs_len)
     val_ds   = TrajectoryDataset(trajectory, timestamps, val_idx,   stats, obs_len)

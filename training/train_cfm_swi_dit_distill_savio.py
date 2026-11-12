@@ -34,6 +34,10 @@ future turns (training/turn_weighting.py): a window turning >= 90° counts (1 + 
 a straight one in both terms, with the batch mean weight kept at 1. Validation
 losses stay unweighted so they compare across runs.
 
+--time_weighting picks the weight over the future horizon: 'step' (default, the
+standard last-quarter ×2) or 'linear' (continuous ramp 1 → 2 from the first to the
+last future step). Validation losses always use 'step' so they compare across runs.
+
 Per-epoch metrics (printed and appended to <output_dir>/metrics.csv), all for
 the EMA student unless noted:
     train_loss, train_loss_gt, train_loss_kd   averaged over the epoch (raw student);
@@ -153,12 +157,27 @@ class LossNormalizer:
         return loss / (self.scale + self.eps)
 
 
-def weighted_mse(pred, target, sample_w=None):
-    """Standard CFM loss weighting: last quarter of the future horizon ×2.
+TIME_WEIGHTINGS = ("step", "linear")
+
+
+def time_weights(fut_len, mode="step", device=None):
+    """Per-future-step loss weights, shape (fut_len,).
+    step   (standard): 1 for the first 3/4 of the horizon, 2 for the last quarter.
+    linear (continuous): ramps evenly from 1 at the first future step to 2 at the last."""
+    if mode == "step":
+        weights = torch.ones(fut_len, device=device)
+        weights[-fut_len // 4:] = 2.0
+        return weights
+    if mode == "linear":
+        return torch.linspace(1.0, 2.0, fut_len, device=device)
+    raise ValueError(f"unknown time weighting {mode!r}; known: {', '.join(TIME_WEIGHTINGS)}")
+
+
+def weighted_mse(pred, target, sample_w=None, time_weighting="step"):
+    """CFM loss: MSE weighted over the future horizon by time_weights(time_weighting)
+    (standard = 'step': last quarter ×2).
     sample_w: optional (B,) per-window weights with mean 1 (e.g. turn_weights)."""
-    fut_len = pred.shape[1]
-    weights = torch.ones(fut_len, device=pred.device)
-    weights[-fut_len // 4:] = 2.0
+    weights = time_weights(pred.shape[1], time_weighting, pred.device)
     loss_plain = nn.functional.mse_loss(pred, target, reduction="none")
     loss_plain = loss_plain * weights[None, :, None]
     if sample_w is not None:
@@ -331,6 +350,7 @@ def train(
     warmup_steps   = 1000,
     alpha          = 0.7,
     turn_weight    = 0.0,
+    time_weighting = "step",
     seed           = 42,
     kl_samples     = 20,
     kl_batches     = 5,
@@ -357,7 +377,7 @@ def train(
     device = torch.device(device if torch.cuda.is_available() else "cpu")
     print(f"Training on {device} — CFM + SWI_DiT distillation "
           f"({teacher_cfg.get('name', 'teacher')} → {student_cfg.get('name', 'student')}, "
-          f"alpha={alpha}, turn_weight={turn_weight}, seed={seed})")
+          f"alpha={alpha}, turn_weight={turn_weight}, time_weighting={time_weighting}, seed={seed})")
 
     # seed controls the aircraft-level train/val/test split
     # default: one DataLoader worker per CPU Slurm gave the job (falls back to 4 off-cluster)
@@ -392,6 +412,7 @@ def train(
         "teacher_ckpt": str(teacher_ckpt),
         "alpha":        alpha,
         "turn_weight":  turn_weight,
+        "time_weighting": time_weighting,
         "seed":         seed,
         "subset":       subset,
         "batch_size":   batch_size,
@@ -446,8 +467,8 @@ def train(
                 v_teacher = teacher(obs, x_t, t, t_rel)
 
             sample_w = turn_weights(obs, fut, feat_mean_t, feat_std_t, turn_weight)
-            loss_gt  = weighted_mse(v_pred, v_tgt, sample_w)
-            loss_kd  = weighted_mse(v_pred, v_teacher, sample_w)
+            loss_gt  = weighted_mse(v_pred, v_tgt, sample_w, time_weighting)
+            loss_kd  = weighted_mse(v_pred, v_teacher, sample_w, time_weighting)
 
             # Normalize each term by its running size, then weight
             norm_gt.update(loss_gt)
@@ -576,6 +597,9 @@ if __name__ == "__main__":
     parser.add_argument("--turn_weight", type=float, default=0.0,
                          help="Extra loss weight for turning windows: a window turning >= 90 deg "
                               "counts (1 + turn_weight)x a straight one (0 = off)")
+    parser.add_argument("--time_weighting", choices=TIME_WEIGHTINGS, default="step",
+                         help="Loss weight over the future horizon: 'step' = last quarter x2 "
+                              "(standard), 'linear' = continuous ramp from 1 to 2")
     parser.add_argument("--seed", type=int, default=42,
                          help="Seeds the train/val/test split and all RNGs")
     parser.add_argument("--kl_samples", type=int, default=20,
@@ -600,6 +624,7 @@ if __name__ == "__main__":
         batch_size     = args.batch_size,
         alpha          = args.alpha,
         turn_weight    = args.turn_weight,
+        time_weighting = args.time_weighting,
         seed           = args.seed,
         kl_samples     = args.kl_samples,
         kl_batches     = args.kl_batches,
