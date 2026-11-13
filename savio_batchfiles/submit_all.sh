@@ -8,16 +8,16 @@ cd "$(dirname "$0")/.."
 OLD_SW=OLD_finished_ckpt/SWi_DiT
 NEW_SW=finished_ckpt/SWi_DiT
 RUNS=(   # <run_name>  <student_config>  [<save_dir>]   (save_dir omitted → $SW/<run_name>)
-  "distill_6_2_128  $OLD_SW/6_2_128_SWiDiT/model/student_config.json  $NEW_SW/distill_6_2_128/model"
-  "distill_6_2_256  $OLD_SW/6_2_256_SWiDiT/model/student_config.json  $NEW_SW/distill_6_2_256/model"
-  "distill_6_2_384  $OLD_SW/6_2_384_SWiDiT/model/student_config.json  $NEW_SW/distill_6_2_384/model"
-  "distill_6_4_128  $OLD_SW/6_4_128_SWiDiT/model/student_config.json  $NEW_SW/distill_6_4_128/model"
-  "distill_6_4_256  $OLD_SW/6_4_256_SWiDiT/model/student_config.json  $NEW_SW/distill_6_4_256/model"
-  "distill_6_4_384  $OLD_SW/6_4_384_SWiDiT/model/student_config.json  $NEW_SW/distill_6_4_384/model"
-  "distill_6_6_128  $OLD_SW/6_6_128_SWiDiT/model/student_config.json  $NEW_SW/distill_6_6_128/model"
-  "gru1_2L_256      configs/students/gru_swi_dit_2L_256.json      $NEW_SW/gru1_2L_256/model"
-  "gru2_2L_256      configs/students/gru_swi_dit_2_2L_256.json    $NEW_SW/gru2_2L_256/model"
-  "gru3_1L_256      configs/students/gru_swi_dit_3_1L_256.json    $NEW_SW/gru3_1L_256/model"
+  "distill_6_2_128  $OLD_SW/6_2_128_SWiDiT/model/student_config.json  $NEW_SW/distill_6_2_128"
+  "distill_6_2_256  $OLD_SW/6_2_256_SWiDiT/model/student_config.json  $NEW_SW/distill_6_2_256"
+  "distill_6_2_384  $OLD_SW/6_2_384_SWiDiT/model/student_config.json  $NEW_SW/distill_6_2_384"
+  "distill_6_4_128  $OLD_SW/6_4_128_SWiDiT/model/student_config.json  $NEW_SW/distill_6_4_128"
+  "distill_6_4_256  $OLD_SW/6_4_256_SWiDiT/model/student_config.json  $NEW_SW/distill_6_4_256"
+  "distill_6_4_384  $OLD_SW/6_4_384_SWiDiT/model/student_config.json  $NEW_SW/distill_6_4_384"
+  "distill_6_6_128  $OLD_SW/6_6_128_SWiDiT/model/student_config.json  $NEW_SW/distill_6_6_128"
+  "gru1_2L_256      configs/students/gru_swi_dit_2L_256.json      $NEW_SW/gru1_2L_256"
+  "gru2_2L_256      configs/students/gru_swi_dit_2_2L_256.json    $NEW_SW/gru2_2L_256"
+  "gru3_1L_256      configs/students/gru_swi_dit_3_1L_256.json    $NEW_SW/gru3_1L_256"
 )
 
 for run in "${RUNS[@]}"; do

@@ -69,7 +69,9 @@ mkdir -p "$LOGDIR"   # Slurm will not create the --output directory itself
 
 echo "Save dir: $SAVE_DIR  (model/ + logs/)"
 echo "Submitting $NAME | student=$STUDENT | alpha=$ALPHA | turn_weight=$TURN_WEIGHT | time_weighting=$TIME_WEIGHTING | epochs=$EPOCHS | batch=$BATCH_SIZE | seed=$SEED | resume=$RESUME"
-sbatch --job-name="$NAME" \
+# Time limit given explicitly: Savio rejects jobs without one, and the job script's
+# #SBATCH --time is not always picked up. Override with TIME_LIMIT=HH:MM:SS.
+sbatch --job-name="$NAME" --time="${TIME_LIMIT:-20:00:00}" \
        --output="$LOGDIR/%x_%j.out" --error="$LOGDIR/%x_%j.err" \
        --export=ALL,RUN_NAME="$NAME",OUTPUT_DIR="$OUT",STUDENT_CONFIG="$STUDENT",ALPHA="$ALPHA",TURN_WEIGHT="$TURN_WEIGHT",TIME_WEIGHTING="$TIME_WEIGHTING",EPOCHS="$EPOCHS",BATCH_SIZE="$BATCH_SIZE",SEED="$SEED" \
        savio_batchfiles/CFMSwiDITDistillSavio.sh

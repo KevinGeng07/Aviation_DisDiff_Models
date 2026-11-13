@@ -40,8 +40,13 @@ $PYTHON -c "import torch, numpy, netCDF4; print('torch', torch.__version__, '| n
 # Training run
 # ---------------------------------------------------------------------------
 NC_PATH=/global/scratch/users/kevingeng/aviation-bayen/data/trajectories_adsblol_seq86_stage2.nc
-REPO=/global/scratch/users/kevingeng/aviation-bayen/AviationDiffusionModelsKishore
-TEACHER_CKPT=$REPO/training/checkpoints/swi_dit/best_swi_dit.pt
+# Repo = the folder sbatch was run from (submit_distill_run.sh submits from the repo root),
+# so the job always uses the clone you submitted from, whatever its folder name.
+REPO=${REPO:-$SLURM_SUBMIT_DIR}
+# Teacher weights are gitignored, so a fresh clone won't have them: copy them in, or
+# pass TEACHER_CKPT=/path/to/best_swi_dit.pt (e.g. export it before submit_all.sh).
+TEACHER_CKPT=${TEACHER_CKPT:-$REPO/checkpoints/swi_dit/best_swi_dit.pt}
+[ -f "$TEACHER_CKPT" ] || { echo "Teacher checkpoint not found: $TEACHER_CKPT (set TEACHER_CKPT=...)"; exit 1; }
 
 # Per-run settings (override with sbatch --export=ALL,VAR=value,...)
 RUN_NAME=${RUN_NAME:-swi_dit_distill_4L}
