@@ -26,7 +26,7 @@ class SplitWriter:
 
     def __init__(self, base: Path):
         self.base = base
-        self.parts: list[Path] = []
+        self.parts = []
         self._fh = None
         self._written = 0
 
@@ -54,12 +54,12 @@ class SplitWriter:
         self._fh.close()
 
 
-def stream_parts_sha256(parts: list[Path]) -> tuple[str, int]:
+def stream_parts_sha256(parts):
     h, size = hashlib.sha256(), 0
     d = zlib.decompressobj()
     for p in parts:
         with open(p, "rb") as f:
-            while chunk := f.read(READ_SIZE):
+            for chunk in iter(lambda: f.read(READ_SIZE), b""):
                 out = d.decompress(chunk)
                 h.update(out)
                 size += len(out)
@@ -72,7 +72,9 @@ def stream_parts_sha256(parts: list[Path]) -> tuple[str, int]:
 def remove_stale(pt: Path):
     for old in pt.parent.glob(pt.name + PART_GLOB):
         old.unlink()
-    pt.with_name(pt.name + ".manifest.json").unlink(missing_ok=True)
+    manifest = pt.with_name(pt.name + ".manifest.json")
+    if manifest.exists():
+        manifest.unlink()
 
 
 def compress(pt: Path):
@@ -81,7 +83,7 @@ def compress(pt: Path):
     c = zlib.compressobj(level=6)
     w = SplitWriter(pt)
     with open(pt, "rb") as f:
-        while chunk := f.read(READ_SIZE):
+        for chunk in iter(lambda: f.read(READ_SIZE), b""):
             h.update(chunk)
             size += len(chunk)
             w.write(c.compress(chunk))

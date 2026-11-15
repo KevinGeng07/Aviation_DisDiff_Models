@@ -19,14 +19,15 @@ READ_SIZE = 8 * 1024 * 1024
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as f:
-        while chunk := f.read(READ_SIZE):
+        for chunk in iter(lambda: f.read(READ_SIZE), b""):
             h.update(chunk)
     return h.hexdigest()
 
 
-def cleanup(manifest_path: Path, parts: list[Path]):
+def cleanup(manifest_path: Path, parts):
     for p in parts:
-        p.unlink(missing_ok=True)
+        if p.exists():
+            p.unlink()
     manifest_path.unlink()
 
 
@@ -52,7 +53,7 @@ def decompress(manifest_path: Path):
     with open(tmp, "wb") as fo:
         for p in parts:
             with open(p, "rb") as fi:
-                while chunk := fi.read(READ_SIZE):
+                for chunk in iter(lambda: fi.read(READ_SIZE), b""):
                     data = d.decompress(chunk)
                     h.update(data)
                     size += len(data)
