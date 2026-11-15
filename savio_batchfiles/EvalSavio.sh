@@ -1,14 +1,18 @@
 #!/bin/bash
 # ---------------------------------------------------------------------------
 # SLURM job script: evaluate finished checkpoints, 1 GPU
-#   SCRIPT=evaluate        (default) test-set ADE/FDE        → table in logs/eval_<jobid>.out
-#   SCRIPT=sample_futures  sampled futures for 10 windows    → eval/futures.csv
+#   SCRIPT=evaluate        (default) test-set ADE/FDE (+ p1/p99) → table in logs/eval_<jobid>.out
+#   SCRIPT=benchmark       ADE/FDE + params + latency            → table in logs/eval_<jobid>.out
+#   SCRIPT=sample_futures  sampled futures for 10 windows        → eval/futures.csv
 #
-# Usage (on Savio, from the repo root):
+# Usage (on Savio, from the repo root — the job runs in the folder you submit from):
 #   sbatch savio_batchfiles/EvalSavio.sh                                  # every model in finished_ckpt/
-#   sbatch savio_batchfiles/EvalSavio.sh finished_ckpt/6_4_256_SWiDiT training/checkpoints/distill_4L_384_a07
+#   sbatch savio_batchfiles/EvalSavio.sh finished_ckpt/SWi_DiT/distill_6_4_256 finished_ckpt/SWi_DiT/gru1_2L_256
 #   EVAL_ARGS="--n_samples 5 --max_batches 50" sbatch savio_batchfiles/EvalSavio.sh   # extra script options
+#   EVAL_ARGS="--out results/eval.json" sbatch savio_batchfiles/EvalSavio.sh          # also save JSON
+#   SCRIPT=benchmark sbatch savio_batchfiles/EvalSavio.sh                 # accuracy/size/speed table
 #   SCRIPT=sample_futures sbatch savio_batchfiles/EvalSavio.sh            # futures CSV for every model
+# Compressed checkpoints (best.pt.gz.part*) are read directly; no need to decompress first.
 # ---------------------------------------------------------------------------
 #SBATCH --job-name=eval
 #SBATCH --account=ac_mixedav
@@ -29,8 +33,8 @@ source activate adsb
 PYTHON=$HOME/.conda/envs/adsb/bin/python
 
 NC_PATH=/global/scratch/users/kevingeng/aviation-bayen/data/trajectories_adsblol_seq86_stage2.nc
-REPO=/global/scratch/users/kevingeng/aviation-bayen/AviationDiffusionModelsKishore
-cd $REPO
+REPO=${REPO:-$SLURM_SUBMIT_DIR}   # override with REPO=/path/to/repo sbatch ...
+cd "$REPO"
 
 SCRIPT=${SCRIPT:-evaluate}
 echo "Script: eval/$SCRIPT.py | folders: ${*:-every model in finished_ckpt/} | extra args: ${EVAL_ARGS:-none}"
