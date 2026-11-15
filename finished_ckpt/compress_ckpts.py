@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Compress every .pt file under this folder into <=99 MB split parts.
+"""Compress every .pt file over 99 MB under this folder into <=99 MB split parts.
 
-For each `foo.pt` found (recursively) next to this script:
+Files at or under 99 MB are left untouched (they already fit GitHub's 100 MB
+limit). For each larger `foo.pt` found (recursively) next to this script:
   foo.pt.gz.part000, foo.pt.gz.part001, ...   zlib-compressed chunks (<=99 MB each)
   foo.pt.manifest.json                        sha256/size of the original + part list
 
@@ -111,9 +112,13 @@ def compress(pt: Path):
 
 def main():
     root = Path(sys.argv[1] if len(sys.argv) > 1 else Path(__file__).resolve().parent)
-    pts = sorted(root.rglob("*.pt"))
+    all_pts = sorted(root.rglob("*.pt"))
+    pts = [p for p in all_pts if p.stat().st_size > PART_SIZE]
+    for p in all_pts:
+        if p not in pts:
+            print(f"[skip] {p.relative_to(root)} ({p.stat().st_size/2**20:.1f} MB, under limit)")
     if not pts:
-        print(f"No .pt files under {root}")
+        print(f"No .pt files over {PART_SIZE // 2**20} MB under {root}")
         return
     failed = 0
     for pt in pts:
