@@ -3,7 +3,7 @@ Sample futures from every finished model for a few random test windows → one C
 
 Usage (from the repo root):
     python eval/sample_futures.py                                  # every model in finished_ckpt/
-    python eval/sample_futures.py finished_ckpt/6_4_256_SWiDiT     # or folders given on the command line
+    python eval/sample_futures.py finished_ckpt/SWi_DiT/6_4_256_SWiDiT     # or folders given on the command line
     python eval/sample_futures.py --n_traj 10 --n_samples 20 --out eval/futures.csv
 
 Picks --n_traj random test windows (the same ones for every model), samples

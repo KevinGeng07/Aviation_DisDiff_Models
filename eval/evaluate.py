@@ -3,15 +3,16 @@ Evaluate finished CFM SWI_DiT checkpoints on the test set.
 
 Usage (from the repo root):
     python eval/evaluate.py                                   # every model in finished_ckpt/
-    python eval/evaluate.py finished_ckpt/6_2_128_SWiDiT      # or folders given on the command line
+    python eval/evaluate.py finished_ckpt/SWi_DiT/6_2_128_SWiDiT   # or folders given on the command line
     python eval/evaluate.py --n_samples 20 --max_batches 10
 
 With no folders, every folder under finished_ckpt/ holding best.pt (or --ckpt) is one
-model, e.g. finished_ckpt/6_4_256_SWiDiT/model and each round of
-finished_ckpt/6_4_256_Progressive/model/steps_NN. A folder given on the command line
-can be the run folder itself or any parent of it. A checkpoint that was split to fit
-GitHub's file limit (best_0.pt, best_1.pt, ... or best.pt.part_aa, ...) is joined in
-memory automatically. Progressive-distillation students are sampled with their own
+model, e.g. finished_ckpt/SWi_DiT/6_4_256_SWiDiT/model and each round of
+finished_ckpt/SWi_DiT/6_4_256_Progressive/model/steps_NN; models are named after the
+folder above model/. A folder given on the command line can be the run folder itself
+or any parent of it. A checkpoint that was split to fit GitHub's file limit
+(finished_ckpt/compress_ckpts.py's best.pt.gz.part000 + best.pt.manifest.json, or
+best_0.pt, best_1.pt, ... or best.pt.part_aa, ...) is joined in memory automatically. Progressive-distillation students are sampled with their own
 step count (stored in the checkpoint) instead of --n_steps.
 
 For every test window the model samples K possible futures (K = --n_samples).
@@ -21,6 +22,8 @@ Errors are distances in metres between predicted and true (x, y) positions:
     FDE  = error at the last future step only           (how good is the endpoint)
     min  = error of the best of the K samples           (did ANY sample get it right)
     avg  = error averaged over the K samples            (how good is a typical sample)
+    p1 / p99 = 1st / 99th percentile over test windows of minADE and minFDE
+               (the easiest and hardest 1% of windows; the plain values are means)
 
 So you get minADE, minFDE, avgADE, avgFDE, each averaged over all test windows,
 and minFDE_turn / avgFDE_turn: the same over only the windows whose true future
@@ -28,10 +31,12 @@ turns >= --turn_deg (default 45°) away from the last observed heading
 (training/turn_weighting.py), since that is where the models under-turn.
 """
 import argparse
+import hashlib
 import io
 import json
 import re
 import sys
+import zlib
 from pathlib import Path
 
 import netCDF4 as nc
@@ -49,14 +54,19 @@ from training.turn_weighting import turn_angle
 def find_run_folders(ckpt_name, root=ROOT / "finished_ckpt"):
     """Every folder under root holding ckpt_name (or split pieces of it) — one per model."""
     stem  = Path(ckpt_name).stem
-    found = [*Path(root).rglob(ckpt_name), *Path(root).rglob(f"{stem}_0.pt")]
+    found = [*Path(root).rglob(ckpt_name), *Path(root).rglob(f"{stem}_0.pt"),
+             *Path(root).rglob(f"{ckpt_name}.manifest.json")]
     return sorted({p.parent for p in found})
 
 
 def model_name(folder, n_steps=None):
-    """finished_ckpt/6_4_256_SWiDiT/model → 6_4_256_SWiDiT; progressive rounds get _<n>step."""
+    """finished_ckpt/SWi_DiT/6_4_256_SWiDiT/model → 6_4_256_SWiDiT (the folder above model/);
+    progressive rounds (.../model/steps_NN) get _<n>step."""
     parts = Path(folder).resolve().parts
-    name  = parts[parts.index("finished_ckpt") + 1] if "finished_ckpt" in parts else Path(folder).name
+    if "model" in parts[1:]:
+        name = parts[len(parts) - 1 - parts[::-1].index("model") - 1]
+    else:
+        name = Path(folder).name
     return name + (f"_{n_steps}step" if n_steps else "")
 
 
@@ -78,12 +88,36 @@ def find_pieces(folder, ckpt_name):
     return sorted(Path(folder).rglob(f"{ckpt_name}.part_*"))
 
 
+def read_compressed(manifest_path):
+    """Rebuild a checkpoint split by finished_ckpt/compress_ckpts.py, in memory, checking its sha256."""
+    m = json.loads(manifest_path.read_text())
+    parts = [manifest_path.parent / name for name in m["parts"]]
+    missing = [p.name for p in parts if not p.exists()]
+    if missing:
+        sys.exit(f"{manifest_path}: missing parts {missing}")
+    print(f"Decompressing {len(parts)} parts: {', '.join(p.name for p in parts)}")
+    d, buf = zlib.decompressobj(), io.BytesIO()
+    for p in parts:
+        buf.write(d.decompress(p.read_bytes()))
+    buf.write(d.flush())
+    data = buf.getvalue()
+    if len(data) != m["size"] or hashlib.sha256(data).hexdigest() != m["sha256"]:
+        sys.exit(f"{manifest_path}: decompressed checkpoint fails its sha256/size check")
+    buf.seek(0)
+    return buf
+
+
 def load_checkpoint(folder, ckpt_name, device):
     """Load ckpt_name from folder; if only split pieces exist, join them in memory first
     (nothing is written to disk). Returns (checkpoint dict, path of the checkpoint)."""
     ckpt_path = find_file(folder, ckpt_name)
     if ckpt_path is not None:
         return torch.load(ckpt_path, map_location=device, weights_only=False), ckpt_path
+
+    manifest = find_file(folder, f"{ckpt_name}.manifest.json")
+    if manifest is not None:
+        ckpt_path = manifest.parent / ckpt_name
+        return torch.load(read_compressed(manifest), map_location=device, weights_only=False), ckpt_path
 
     pieces = find_pieces(folder, ckpt_name)
     if pieces:
@@ -133,6 +167,7 @@ def evaluate(model, test_loader, feat_mean, feat_std, device, n_samples, n_steps
     totals = {"minADE": 0.0, "minFDE": 0.0, "avgADE": 0.0, "avgFDE": 0.0,
               "minFDE_turn": 0.0, "avgFDE_turn": 0.0}
     n_windows = n_turn = 0
+    per_window = {"minADE": [], "minFDE": []}   # kept per window for the percentiles
 
     with torch.no_grad():
         for b, batch in enumerate(test_loader):
@@ -153,8 +188,11 @@ def evaluate(model, test_loader, feat_mean, feat_std, device, n_samples, n_steps
             ade = err.mean(dim=-1)                              # (K, B) average over steps
             fde = err[..., -1]                                  # (K, B) last step
 
-            totals["minADE"] += ade.min(dim=0).values.sum().item()
-            totals["minFDE"] += fde.min(dim=0).values.sum().item()
+            min_ade, min_fde = ade.min(dim=0).values, fde.min(dim=0).values   # (B,)
+            totals["minADE"] += min_ade.sum().item()
+            totals["minFDE"] += min_fde.sum().item()
+            per_window["minADE"].append(min_ade.cpu())
+            per_window["minFDE"].append(min_fde.cpu())
             totals["avgADE"] += ade.mean(dim=0).sum().item()
             totals["avgFDE"] += fde.mean(dim=0).sum().item()
             n_windows += obs.shape[0]
@@ -167,8 +205,12 @@ def evaluate(model, test_loader, feat_mean, feat_std, device, n_samples, n_steps
                   f"{totals['minFDE'] / n_windows:.1f}m", end="\r", flush=True)
 
     print()
-    return {k: v / (max(n_turn, 1) if k.endswith("_turn") else n_windows)
-            for k, v in totals.items()}, n_windows, n_turn
+    results = {k: v / (max(n_turn, 1) if k.endswith("_turn") else n_windows)
+               for k, v in totals.items()}
+    for k, chunks in per_window.items():   # spread over windows: best-case and worst-case tails
+        p1, p99 = np.percentile(torch.cat(chunks).double().numpy(), [1, 99])
+        results[f"{k}_p1"], results[f"{k}_p99"] = float(p1), float(p99)
+    return results, n_windows, n_turn
 
 
 def main(device=None):

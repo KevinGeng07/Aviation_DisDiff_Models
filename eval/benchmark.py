@@ -2,11 +2,11 @@
 Benchmark the distilled SWI_DiT students side by side: accuracy, size and speed.
 
 Usage (on Savio, from the repo root):
-    SCRIPT=benchmark sbatch savio_batchfiles/EvalSavio.sh                      # the 7 *_SWiDiT students
-    SCRIPT=benchmark sbatch savio_batchfiles/EvalSavio.sh finished_ckpt/6_4_256_SWiDiT
+    SCRIPT=benchmark sbatch savio_batchfiles/EvalSavio.sh                      # every model in finished_ckpt/
+    SCRIPT=benchmark sbatch savio_batchfiles/EvalSavio.sh finished_ckpt/SWi_DiT/distill_6_4_256
     SCRIPT=benchmark EVAL_ARGS="--max_batches 10 --out results/benchmark.json" sbatch savio_batchfiles/EvalSavio.sh
     SCRIPT=benchmark EVAL_ARGS="--n_steps 20 16 8 4 2 1 --out results/benchmark_all.json" \
-        sbatch savio_batchfiles/EvalSavio.sh finished_ckpt/*_SWiDiT finished_ckpt/6_4_256_Progressive
+        sbatch savio_batchfiles/EvalSavio.sh finished_ckpt/SWi_DiT/*
         # every student at every step count + each progressive round, in one file
 
 For every model:
@@ -66,7 +66,7 @@ def sample_latency(model, test_loader, device, n_steps, n_runs, n_warmup=20):
 def main():
     parser = argparse.ArgumentParser(description="ADE/FDE, parameter count and latency per model")
     parser.add_argument("folders", nargs="*",
-                        help="run folders (default: every finished_ckpt/*_SWiDiT student)")
+                        help="run folders (default: every model in finished_ckpt/)")
     parser.add_argument("--nc_path", default=str(ROOT / "Data" / "trajectories_adsblol_seq86_stage2.nc"))
     parser.add_argument("--ckpt", default="best.pt", help="best.pt or last.pt")
     parser.add_argument("--n_samples", type=int, default=20, help="K futures per window for ADE/FDE")
@@ -80,7 +80,7 @@ def main():
     args = parser.parse_args()
 
     folders = [Path(f) if Path(f).is_absolute() or Path(f).exists() else ROOT / f for f in args.folders] \
-              or sorted((ROOT / "finished_ckpt").glob("*_SWiDiT"))
+              or [ROOT / "finished_ckpt"]
     missing = [str(f) for f in folders if not f.is_dir()]
     if missing:
         sys.exit("Folder(s) not found: " + ", ".join(missing))

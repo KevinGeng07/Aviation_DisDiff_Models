@@ -3,7 +3,7 @@ Same as eval/evaluate.py, but runs the models on the Apple GPU (MPS) of an M-ser
 
 Usage (from the repo root) — same arguments as evaluate.py:
     python eval/evaluate_mps.py                                  # every folder in FOLDERS (evaluate.py)
-    python eval/evaluate_mps.py finished_ckpt/6_5_SWiDiT --max_batches 20
+    python eval/evaluate_mps.py finished_ckpt/SWi_DiT/6_5_SWiDiT --max_batches 20
 """
 import sys
 from pathlib import Path
