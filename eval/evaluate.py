@@ -269,8 +269,8 @@ def main(device=None):
     names = list(next(iter(all_results.values())))
     width = max(len(k) for k in all_results) + 2
     print("model".ljust(width) + "".join(f"{m:>13}" for m in names))
-    for model_name, results in all_results.items():
-        print(model_name.ljust(width) + "".join(f"{results[m]:13.1f}" for m in names))
+    for run, results in all_results.items():
+        print(run.ljust(width) + "".join(f"{results[m]:13.1f}" for m in names))
 
     if args.out:
         settings = {k: getattr(args, k) for k in ("ckpt", "n_samples", "n_steps", "max_batches",
