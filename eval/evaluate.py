@@ -159,8 +159,29 @@ def load_model(folder, ckpt_name, device):
     return model, seed, ckpt.get("n_steps")   # n_steps: set by progressive distillation
 
 
+def sample(model, obs, t_rel, n_samples, n_steps, device, chunk=256):
+    """euler_sample, running up to `chunk` trajectories per model call. If that runs out of
+    GPU memory, halve the chunk and retry with the same random state, so the sampled
+    futures are identical whatever chunk size ends up working. Returns (preds, chunk used)."""
+    while True:
+        cpu_state  = torch.get_rng_state()
+        cuda_state = torch.cuda.get_rng_state(device) if device.type == "cuda" else None
+        try:
+            return euler_sample(model, obs, t_rel, n_samples=n_samples, n_steps=n_steps,
+                                device=str(device), chunk=chunk), chunk
+        except RuntimeError as e:
+            if "out of memory" not in str(e) or chunk <= 1:
+                raise
+            torch.set_rng_state(cpu_state)
+            if cuda_state is not None:
+                torch.cuda.set_rng_state(cuda_state, device)
+                torch.cuda.empty_cache()
+            chunk //= 2
+            print(f"\n  out of GPU memory, retrying with --chunk {chunk}")
+
+
 def evaluate(model, test_loader, feat_mean, feat_std, device, n_samples, n_steps, max_batches,
-             turn_deg=45.0):
+             turn_deg=45.0, chunk=256):
     mean_t = torch.tensor(feat_mean, device=device, dtype=torch.float32)
     std_t  = torch.tensor(feat_std,  device=device, dtype=torch.float32)
     std_xy = std_t[:2]
@@ -177,8 +198,7 @@ def evaluate(model, test_loader, feat_mean, feat_std, device, n_samples, n_steps
             fut   = batch["fut"].to(device)
             t_rel = batch["t_rel"].to(device)
 
-            preds = euler_sample(model, obs, t_rel, n_samples=n_samples,
-                                 n_steps=n_steps, device=str(device))   # (K, B, 43, 6)
+            preds, chunk = sample(model, obs, t_rel, n_samples, n_steps, device, chunk)  # (K, B, 43, 6)
 
             # back to metres: only x, y; the mean cancels in a difference, so multiply by std
             pred_xy = preds[..., :2] * std_xy            # (K, B, 43, 2)
@@ -223,6 +243,9 @@ def main(device=None):
     parser.add_argument("--n_steps", type=int, default=20,
                         help="Euler steps (training used 20; progressive students use their own)")
     parser.add_argument("--batch_size", type=int, default=256)
+    parser.add_argument("--chunk", type=int, default=256,
+                        help="trajectories per model call while sampling (bigger can be faster on a GPU with "
+                             "spare capacity; halves automatically on out-of-memory; results don't change)")
     parser.add_argument("--max_batches", type=int, default=None, help="limit for a quick check")
     parser.add_argument("--num_workers", type=int, default=2)
     parser.add_argument("--turn_deg", type=float, default=45.0,
@@ -259,7 +282,7 @@ def main(device=None):
         torch.manual_seed(0)   # same sampling noise for every model → comparable numbers
         results, n, n_turn = evaluate(model, test_loaders[seed], feat_mean, feat_std, device,
                                       args.n_samples, ckpt_steps or args.n_steps,
-                                      args.max_batches, args.turn_deg)
+                                      args.max_batches, args.turn_deg, args.chunk)
         all_results[model_name(folder, ckpt_steps)] = results
         for name, value in results.items():
             print(f"  {name}: {value:8.1f} m")

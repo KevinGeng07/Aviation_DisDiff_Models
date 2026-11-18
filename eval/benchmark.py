@@ -75,6 +75,8 @@ def main():
     parser.add_argument("--n_runs", type=int, default=1000, help="timed single-sample runs for latency")
     parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--max_batches", type=int, default=None, help="limit ADE/FDE batches for a quick check")
+    parser.add_argument("--chunk", type=int, default=256,
+                        help="trajectories per model call while sampling for ADE/FDE (see evaluate.py)")
     parser.add_argument("--num_workers", type=int, default=2)
     parser.add_argument("--out", default=None, help="also save the results to this JSON file")
     args = parser.parse_args()
@@ -111,7 +113,7 @@ def main():
 
             torch.manual_seed(0)   # same sampling noise for every model → comparable numbers
             metrics, n, _ = evaluate(model, test_loaders[seed], feat_mean, feat_std, device,
-                                     args.n_samples, n_steps, args.max_batches)
+                                     args.n_samples, n_steps, args.max_batches, chunk=args.chunk)
             results = {"steps": n_steps}
             results.update({k: metrics[k] for k in ("minADE", "minFDE", "avgADE", "avgFDE")})
             results["params"] = sum(p.numel() for p in model.parameters())

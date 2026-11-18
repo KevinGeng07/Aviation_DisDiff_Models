@@ -1,5 +1,12 @@
 """
-Progressive distillation (Salimans & Ho, 2022) for CFM + SWI_DiT: fewer sampling steps.
+Stepwise distillation for CFM + SWI_DiT: fewer sampling steps, same architecture.
+Two methods (--method), trained from the same base model so they compare directly:
+
+  progressive  (Salimans & Ho, 2022)  halve the step count round by round: 32 → 16 → ... → 1
+  consistency  (Song et al., 2023)    one stage that trains the model to jump straight to the
+                                      end of the teacher's ODE path from any point on it
+
+── Progressive distillation ──────────────────────────────────────────────────
 
 The architecture stays the same; what shrinks is the number of Euler steps the
 sampler needs. Starting from any trained model (--base, default 6_4_256), each
@@ -27,18 +34,50 @@ so one student Euler step of size 2dt lands exactly where two teacher steps do.
 --turn_weight S (default 0 = off) weights each window by how much its true future
 turns, as in train_cfm_swi_dit_distill_savio.py (training/turn_weighting.py).
 
-Selecting a model (--base, and --teacher for an optional different round-1 teacher):
+── Consistency distillation ──────────────────────────────────────────────────
 
-    6_4_256                            shorthand for finished_ckpt/6_4_256_SWiDiT
+The consistency function f(x_t, t) predicts the trajectory at t = 1 (the data end; t = 0 is
+pure noise) from any point x_t. It is built on the same velocity network:
+
+    f(x_t, t) = x_t + (1 - t)·v_θ(x_t, t)          (= where ONE Euler step from t lands)
+
+so f(x, 1) = x holds by construction (the boundary condition), and eval/evaluate.py's Euler
+sampler is the consistency sampler: --n_steps 1 is exactly x = f(noise, 0); with more steps
+each Euler step moves along the straight line towards the current f prediction.
+
+Training (Song et al. 2023, Algorithm 2), on a grid t_n = n/N, n = 0..N (N = --cd_n):
+
+    n ~ U{0, ..., N-1},  x_{t_n} = (1 - t_n)·noise + t_n·fut
+    x̂_{t_n+1} = one teacher ODE step from x_{t_n}  (--cd_solver heun | euler, step 1/N)
+    target    = f_θ⁻(x̂_{t_n+1}, t_n+1)              (θ⁻ = slow EMA "target" copy, no grad)
+    L         = d(f_θ(x_{t_n}, t_n), target)          (--cd_loss l2 | huber, horizon-weighted)
+
+At t_n+1 = 1 the target is the teacher's step itself (f(x, 1) = x), which anchors the chain;
+consistency between neighbouring grid points then propagates that back to t = 0. The student
+starts from the base model's weights. One stage of --cd_epochs epochs; the best epoch is chosen
+by val minFDE@5 with --cd_eval_steps Euler steps.
+
+Output: <output_dir>/{best.pt, last.pt, metrics.csv, student_config.json, done}. The checkpoint
+stores no fixed step count, so evaluate it at the step counts you want:
+    python eval/evaluate.py <run folder> --n_steps 1
+    python eval/benchmark.py <run folder> --n_steps 1 2 4 8 16
+
+── Selecting a model ─────────────────────────────────────────────────────────
+
+(--base, and --teacher for an optional different teacher; progressive: round-1 teacher)
+
+    6_4_256                            shorthand for finished_ckpt/SWi_DiT/distill_6_4_256
+                                       (falls back to the old finished_ckpt/6_4_256_SWiDiT layouts)
     teacher                            the original 6-layer model (configs/swi_dit_teacher.json)
-    finished_ckpt/6_4_384_SWiDiT       any run folder; best.pt (--ckpt_name) is found inside,
-                                       split checkpoints (best_0.pt, ...) are joined
+    finished_ckpt/SWi_DiT/distill_6_4_384   any run folder; best.pt (--ckpt_name) is found inside,
+                                       split / compressed checkpoints are joined
     path/to/some.pt                    a checkpoint file
 
 The architecture comes from --base_config / --teacher_config if given, else
 student_config.json next to the checkpoint, else the config stored inside it.
 
-Output layout (each round folder works with eval/evaluate.py --n_steps N):
+Progressive output layout (default <output_dir> = finished_ckpt/SWi_DiT/progressive_<base>/model;
+each round folder stores its step count, which eval/ uses automatically):
 
     <output_dir>/steps_16/{best.pt, last.pt, metrics.csv, student_config.json, done}
     <output_dir>/steps_08/...
@@ -69,7 +108,7 @@ from models.cfm import forward_cfm, euler_sample
 from eval.evaluate import load_checkpoint
 from training.turn_weighting import turn_weights, feature_stats
 from training.train_cfm_swi_dit_distill_savio import (
-    EMA, set_seed, resolve_path, load_config, weighted_mse,
+    EMA, set_seed, resolve_path, load_config, weighted_mse, time_weights,
 )
 
 CHECKPOINT_DIR = ROOT / "training" / "checkpoints"
@@ -89,10 +128,22 @@ def run_label(spec):
     """Short name for a --base spec, used in the default output folder."""
     if spec == "teacher":
         return "6_6_256"
-    name = Path(spec).name
-    if name.endswith(".pt"):
-        name = Path(spec).parent.name
-    return name.removesuffix("_SWiDiT")
+    path = Path(spec)
+    if path.name.endswith(".pt"):
+        path = path.parent
+    if path.name == "model":                      # .../<run>/model → <run>
+        path = path.parent
+    name = path.name.removesuffix("_SWiDiT")
+    return name.removeprefix("distill_")
+
+
+def resolve_shorthand(spec):
+    """6_4_256 → the run folder holding that student, newest layout first."""
+    for cand in (f"finished_ckpt/SWi_DiT/distill_{spec}", f"finished_ckpt/{spec}_SWiDiT",
+                 f"OLD_finished_ckpt/SWi_DiT/{spec}_SWiDiT"):
+        if resolve_path(cand).exists():
+            return cand
+    sys.exit(f"Shorthand {spec}: no finished_ckpt/SWi_DiT/distill_{spec} (or older layout) found")
 
 
 def load_model_spec(spec, config_path, ckpt_name, device):
@@ -110,7 +161,7 @@ def load_model_spec(spec, config_path, ckpt_name, device):
         ckpt      = torch.load(ckpt_path, map_location=device, weights_only=False)
     else:
         if re.fullmatch(r"\d+_\d+(_\d+)?", spec):           # e.g. 6_4_256
-            spec = f"finished_ckpt/{spec}_SWiDiT"
+            spec = resolve_shorthand(spec)
         path = resolve_path(spec)
         if path.is_file():
             ckpt_path = path
@@ -218,13 +269,198 @@ def validate_loss(student, teacher, val_loader, device, seed, n_steps, max_batch
     return total / n
 
 
-def append_metrics(path, row):
+# ── Consistency distillation pieces ──────────────────────────────────────
+
+CD_METRIC_FIELDS = [
+    "epoch", "lr", "epoch_time_s", "train_loss", "val_loss", "val_minfde",
+]
+
+
+def consistency_fn(model, obs, x_t, t, t_rel):
+    """f(x_t, t) = x_t + (1 - t)·v(x_t, t): the t = 1 endpoint one Euler step from t lands on."""
+    return x_t + (1.0 - t).view(-1, 1, 1) * model(obs, x_t, t, t_rel)
+
+
+def teacher_ode_step(teacher, obs, x_t, t, t_rel, dt, solver):
+    """One teacher ODE step of size dt from (x_t, t): Euler, or Heun (2nd order, 2 calls)."""
+    v1 = teacher(obs, x_t, t, t_rel)
+    x1 = x_t + v1 * dt
+    if solver == "euler":
+        return x1
+    v2 = teacher(obs, x1, t + dt, t_rel)
+    return x_t + 0.5 * (v1 + v2) * dt
+
+
+def consistency_distance(pred, target, sample_w, kind, huber_c):
+    """Distance between predicted endpoints, both with the standard horizon weighting
+    (last quarter ×2). l2 = weighted MSE; huber = pseudo-Huber per window,
+    sqrt(||w·(pred - target)²||₁ + c²) - c, as in improved consistency training."""
+    if kind == "l2":
+        return weighted_mse(pred, target, sample_w)
+    w    = time_weights(pred.shape[1], "step", pred.device)
+    sq   = ((pred - target) ** 2 * w[None, :, None]).sum(dim=(1, 2))      # (B,)
+    loss = torch.sqrt(sq + huber_c ** 2) - huber_c
+    if sample_w is not None:
+        loss = loss * sample_w
+    return loss.mean()
+
+
+def cd_batch_loss(student, target_model, teacher, obs, fut, t_rel, args, sample_w=None):
+    """Consistency-distillation loss for one batch (see module docstring)."""
+    N     = args.cd_n
+    n     = torch.randint(0, N, (obs.shape[0],), device=obs.device)
+    t     = n.float() / N
+    t_nxt = (n + 1).float() / N
+    x_t, _, _ = forward_cfm(fut, t)
+    with torch.no_grad():
+        x_nxt  = teacher_ode_step(teacher, obs, x_t, t, t_rel, 1.0 / N, args.cd_solver)
+        target = consistency_fn(target_model, obs, x_nxt, t_nxt, t_rel)
+    pred = consistency_fn(student, obs, x_t, t, t_rel)
+    return consistency_distance(pred, target, sample_w, args.cd_loss, args.cd_huber_c)
+
+
+def validate_cd_loss(student, target_model, teacher, val_loader, device, args, max_batches=20):
+    student.eval()
+    torch.manual_seed(args.seed)
+    total, n = 0.0, 0
+    with torch.no_grad():
+        for batch in val_loader:
+            if n >= max_batches:
+                break
+            total += cd_batch_loss(student, target_model, teacher, batch["obs"].to(device),
+                                   batch["fut"].to(device), batch["t_rel"].to(device), args).item()
+            n += 1
+    return total / n
+
+
+def train_consistency(teacher, student_cfg, init_state, train_loader, val_loader, feat_std,
+                      out_dir, device, args, run_info):
+    """One consistency-distillation stage. Returns the path of the best checkpoint."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with open(out_dir / "student_config.json", "w") as f:
+        json.dump(student_cfg, f, indent=2)
+    metrics_path = out_dir / "metrics.csv"
+
+    model = build_model(student_cfg).to(device)
+    model.load_state_dict(init_state)                     # starts as a copy of the base model
+    ema    = EMA(model, decay=args.ema_decay)             # weights that get evaluated / saved
+    target = EMA(model, decay=args.cd_target_decay)       # θ⁻: slow copy that produces targets
+
+    optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    scheduler = CosineAnnealingLR(optimizer, T_max=max(1, args.cd_epochs - 1),
+                                  eta_min=args.lr * args.min_lr_frac)
+    feat_mean_t, feat_std_t = feature_stats(train_loader, device)
+
+    start_epoch, global_step, best_fde = 0, 0, float("inf")
+    last_ckpt = out_dir / "last.pt"
+    if last_ckpt.exists():
+        ckpt = torch.load(last_ckpt, map_location=device, weights_only=False)
+        model.load_state_dict(ckpt["model_state"])
+        ema.shadow.load_state_dict(ckpt["ema_state"])
+        target.shadow.load_state_dict(ckpt["target_state"])
+        optimizer.load_state_dict(ckpt["optimizer_state"])
+        scheduler.load_state_dict(ckpt["scheduler_state"])
+        start_epoch = ckpt["epoch"] + 1
+        global_step = ckpt["global_step"]
+        best_fde    = ckpt["best_fde"]
+        print(f"  resumed at epoch {start_epoch}")
+
+    k = args.cd_eval_steps
+    teacher_fde = validate_fde(teacher, val_loader, device, feat_std, args.seed, args.start_steps)
+    init_fde    = validate_fde(model, val_loader, device, feat_std, args.seed, k)
+    print(f"  teacher @ {args.start_steps} steps: {teacher_fde:.1f}m | "
+          f"student @ {k} step(s) before this run: {init_fde:.1f}m", flush=True)
+
+    for epoch in range(start_epoch, args.cd_epochs):
+        torch.manual_seed(args.seed + 7919 + epoch)
+        epoch_start = time.time()
+        epoch_lr    = optimizer.param_groups[0]["lr"]
+        model.train()
+        total_loss, n_batches = 0.0, 0
+
+        for batch in train_loader:
+            obs   = batch["obs"].to(device)
+            fut   = batch["fut"].to(device)
+            t_rel = batch["t_rel"].to(device)
+            sample_w = turn_weights(obs, fut, feat_mean_t, feat_std_t, args.turn_weight)
+            loss     = cd_batch_loss(model, target.shadow, teacher, obs, fut, t_rel, args, sample_w)
+
+            optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
+            optimizer.step()
+            if global_step < args.warmup_steps:
+                for pg in optimizer.param_groups:
+                    pg["lr"] = args.lr * (global_step + 1) / args.warmup_steps
+
+            ema.update(model)
+            target.update(model)
+            total_loss  += loss.item()
+            n_batches   += 1
+            global_step += 1
+            if args.log_every and n_batches % args.log_every == 0:
+                elapsed = time.time() - epoch_start
+                print(f"    epoch {epoch+1:03d} | batch {n_batches:,}/{len(train_loader):,} | "
+                      f"loss {total_loss / n_batches:.5f} | {n_batches / elapsed:.1f} it/s",
+                      flush=True)
+
+        scheduler.step()
+
+        val_loss = validate_cd_loss(ema.shadow, target.shadow, teacher, val_loader, device, args)
+        val_fde  = validate_fde(ema.shadow, val_loader, device, feat_std, args.seed, k)
+        metrics  = {
+            "epoch":        epoch + 1,
+            "lr":           f"{epoch_lr:.3e}",
+            "train_loss":   f"{total_loss / n_batches:.6f}",
+            "val_loss":     f"{val_loss:.6f}",
+            "val_minfde":   f"{val_fde:.1f}",
+            "epoch_time_s": f"{time.time() - epoch_start:.1f}",
+        }
+        append_metrics(metrics_path, metrics, CD_METRIC_FIELDS)
+
+        checkpoint = {
+            "epoch":           epoch,
+            "model_state":     model.state_dict(),
+            "ema_state":       ema.shadow.state_dict(),
+            "target_state":    target.shadow.state_dict(),
+            "optimizer_state": optimizer.state_dict(),
+            "scheduler_state": scheduler.state_dict(),
+            "global_step":     global_step,
+            "best_fde":        best_fde,
+            "val_fde":         val_fde,
+            "method":          "consistency",
+            "n_steps":         None,          # any step count works; eval picks it (--n_steps)
+            "val_steps":       k,
+            "teacher_val_fde": teacher_fde,
+            "init_val_fde":    init_fde,
+            "student_config":  student_cfg,
+            "train_config":    {**vars(args), **run_info},
+            "metrics":         metrics,
+        }
+        mark = ""
+        if val_fde < best_fde:
+            best_fde = checkpoint["best_fde"] = val_fde
+            torch.save(checkpoint, out_dir / "best.pt")
+            mark = "  ✓ best"
+        torch.save(checkpoint, last_ckpt)
+
+        print(f"  [consistency] epoch {epoch+1:03d} | train {metrics['train_loss']} | "
+              f"val {metrics['val_loss']} | minFDE@{k}step {val_fde:.1f}m "
+              f"(teacher@{args.start_steps} {teacher_fde:.1f}m, before {init_fde:.1f}m){mark}",
+              flush=True)
+
+    (out_dir / "done").write_text(f"{best_fde:.1f}\n")
+    return out_dir / "best.pt"
+
+
+def append_metrics(path, row, fields=None):
+    fields   = fields or METRIC_FIELDS
     new_file = not path.exists()
     with open(path, "a", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=METRIC_FIELDS)
+        writer = csv.DictWriter(f, fieldnames=fields)
         if new_file:
             writer.writeheader()
-        writer.writerow({k: row.get(k, "") for k in METRIC_FIELDS})
+        writer.writerow({k: row.get(k, "") for k in fields})
 
 
 def train_round(teacher, student_cfg, init_state, teacher_steps, student_steps,
@@ -358,7 +594,8 @@ def main(args):
     set_seed(args.seed)
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
 
-    output_dir = Path(args.output_dir or CHECKPOINT_DIR / f"progressive_{run_label(args.base)}")
+    output_dir = Path(args.output_dir or
+                      ROOT / "finished_ckpt" / "SWi_DiT" / f"{args.method}_{run_label(args.base)}" / "model")
     output_dir.mkdir(parents=True, exist_ok=True)
 
     num_workers = args.num_workers
@@ -373,22 +610,32 @@ def main(args):
     feat_std = np.array(ds.feature_std)
     ds.close()
 
-    print(f"Progressive distillation on {device} → {output_dir}")
+    print(f"{args.method.capitalize()} distillation on {device} → {output_dir}")
     print("Base (student init):", end=" ")
     base_model, base_cfg, base_ckpt = load_model_spec(
         args.base, args.base_config, args.ckpt_name, device)
     init_state = base_model.state_dict()
 
-    # Round-1 teacher: the base model unless --teacher picks another one
+    # Teacher (progressive: round 1): the base model unless --teacher picks another one
     if args.teacher:
-        print("Round-1 teacher:", end=" ")
+        print("Teacher:", end=" ")
         teacher, _, teacher_ckpt = load_model_spec(
             args.teacher, args.teacher_config, args.ckpt_name, device)
     else:
         teacher, teacher_ckpt = base_model, base_ckpt
-        print("Round-1 teacher: the base model")
+        print("Teacher: the base model")
     run_info = {"base_ckpt": str(base_ckpt), "round1_teacher_ckpt": str(teacher_ckpt),
                 "turn_weight": args.turn_weight}
+
+    if args.method == "consistency":
+        if (output_dir / "done").exists():
+            print(f"Already done (best minFDE {(output_dir / 'done').read_text().strip()}m)")
+            return
+        print(f"\n=== Consistency distillation: N={args.cd_n}, {args.cd_solver} teacher steps, "
+              f"{args.cd_loss} loss, target decay {args.cd_target_decay} ===", flush=True)
+        train_consistency(teacher, base_cfg, init_state, train_loader, val_loader, feat_std,
+                          output_dir, device, args, run_info)
+        return
 
     for teacher_steps, student_steps in round_schedule(args.start_steps, args.min_steps):
         round_dir = output_dir / f"steps_{student_steps:02d}"
@@ -412,6 +659,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--nc_path", type=str, required=True,
                         help="Path to the .nc trajectory dataset")
+    parser.add_argument("--method", choices=("progressive", "consistency"), default="progressive",
+                        help="progressive: halve the step count per round; consistency: one stage "
+                             "trained to jump to the end of the teacher's path from any point")
     parser.add_argument("--base", type=str, default="6_4_256",
                         help="Model whose sampler is distilled: shorthand (6_4_256), 'teacher', "
                              "a run folder or a .pt file")
@@ -425,9 +675,10 @@ if __name__ == "__main__":
     parser.add_argument("--ckpt_name", type=str, default="best.pt",
                         help="Checkpoint to use inside run folders (best.pt or last.pt)")
     parser.add_argument("--output_dir", type=str, default=None,
-                        help="Default: training/checkpoints/progressive_<base>")
+                        help="Default: finished_ckpt/SWi_DiT/<method>_<base>/model")
     parser.add_argument("--start_steps", type=int, default=32,
-                        help="Euler steps of the round-1 teacher; halved every round")
+                        help="Euler steps of the round-1 teacher; halved every round "
+                             "(consistency: only the teacher's reference minFDE uses it)")
     parser.add_argument("--min_steps", type=int, default=1,
                         help="Stop once the student reaches this many steps")
     parser.add_argument("--epochs_per_round", type=int, default=10)
@@ -452,4 +703,25 @@ if __name__ == "__main__":
     parser.add_argument("--subset", type=int, default=None,
                         help="Limit to N samples; omit for the full dataset")
     parser.add_argument("--device", type=str, default="cuda")
+    cd = parser.add_argument_group("consistency distillation (--method consistency)")
+    cd.add_argument("--cd_epochs", type=int, default=20,
+                    help="Epochs of the single consistency stage")
+    cd.add_argument("--cd_n", type=int, default=32,
+                    help="Grid intervals N on t in [0, 1]: each training pair is one teacher step "
+                         "of 1/N apart. Larger N = smaller, more accurate teacher steps but a longer "
+                         "chain for consistency to propagate along")
+    cd.add_argument("--cd_solver", choices=("heun", "euler"), default="heun",
+                    help="Teacher ODE step between neighbouring grid points: heun (2nd order, 2 "
+                         "teacher calls) or euler (1 call, cheaper, less accurate)")
+    cd.add_argument("--cd_target_decay", type=float, default=0.95,
+                    help="EMA decay mu of the target network theta- that produces the targets. "
+                         "Higher = steadier targets but slower learning; 0 = the student itself "
+                         "(stop-gradient), as in improved consistency training")
+    cd.add_argument("--cd_loss", choices=("l2", "huber"), default="l2",
+                    help="Distance between predicted endpoints: l2 (horizon-weighted MSE, as the "
+                         "other losses) or huber (pseudo-Huber per window, less hurt by outliers)")
+    cd.add_argument("--cd_huber_c", type=float, default=0.00054 * (43 * 6) ** 0.5,
+                    help="Pseudo-Huber c (default 0.00054*sqrt(dims) ≈ 0.0087, as in iCT)")
+    cd.add_argument("--cd_eval_steps", type=int, default=1,
+                    help="Euler steps used for the per-epoch val minFDE that picks best.pt")
     main(parser.parse_args())

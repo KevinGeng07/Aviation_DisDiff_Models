@@ -29,17 +29,15 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from DataLoaders.ADSBdataset import get_dataloaders
-from models.cfm import euler_sample
-from evaluate import load_model, find_run_folders, model_name
+from evaluate import load_model, find_run_folders, model_name, sample
 
 
-def sample_futures(model, test_ds, picks, n_samples, n_steps, device):
+def sample_futures(model, test_ds, picks, n_samples, n_steps, device, chunk=256):
     """n_samples futures for the picked test windows, all 6 features in m and m/s: (K, n_picks, 43, 6)."""
     items = [test_ds[i] for i in picks]
     obs   = torch.stack([it["obs"] for it in items]).to(device)
     t_rel = torch.stack([it["t_rel"] for it in items]).to(device)
-    preds = euler_sample(model, obs, t_rel, n_samples=n_samples,
-                         n_steps=n_steps, device=str(device))           # (K, n, 43, 6) normalized
+    preds, _ = sample(model, obs, t_rel, n_samples, n_steps, device, chunk)  # (K, n, 43, 6) normalized
     mean, std = test_ds.stats["feature_mean"], test_ds.stats["feature_std"]
     return preds.cpu().numpy() * std + mean
 
@@ -53,6 +51,8 @@ def main():
     parser.add_argument("--n_samples", type=int, default=20, help="futures per window per model")
     parser.add_argument("--n_steps", type=int, default=20, help="Euler steps (progressive students use their own)")
     parser.add_argument("--traj_seed", type=int, default=0, help="which windows get picked")
+    parser.add_argument("--chunk", type=int, default=256,
+                        help="trajectories per model call while sampling (see evaluate.py)")
     parser.add_argument("--num_workers", type=int, default=2)
     parser.add_argument("--out", default=str(ROOT / "eval" / "futures.csv"))
     args = parser.parse_args()
@@ -84,7 +84,7 @@ def main():
 
         torch.manual_seed(0)                                # same sampling noise for every model
         futures = sample_futures(model, test_ds, picks, args.n_samples,
-                                 ckpt_steps or args.n_steps, device)
+                                 ckpt_steps or args.n_steps, device, args.chunk)
         for k in range(futures.shape[0]):
             for j, w in enumerate(windows):
                 rows += [(name, w, k + 1, s + 1, *feats) for s, feats in enumerate(futures[k, j])]
