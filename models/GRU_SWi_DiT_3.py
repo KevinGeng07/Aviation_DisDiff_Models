@@ -70,6 +70,9 @@ class AdaLNBlock_Transformer(nn.Module):
         # Layer norms (no affine — AdaLN supplies scale/shift instead)
         self.norm1 = nn.LayerNorm(d_model, elementwise_affine=False)
         self.norm2 = nn.LayerNorm(d_model, elementwise_affine=False)
+        self.norm3 = nn.LayerNorm(d_model, elementwise_affine=False)
+        self.norm4 = nn.LayerNorm(d_model, elementwise_affine=False)
+        
 
         # Self attention
         self.attn1 = nn.MultiheadAttention(d_model, n_heads,
@@ -80,7 +83,9 @@ class AdaLNBlock_Transformer(nn.Module):
                                            dropout=dropout, batch_first=True)
 
         # Feedforward: SwiGLU with hidden width ff_expansion * d_model
-        self.ff = SwiGLU(d_model, expansion=ff_expansion, bias=False)
+        self.ff_1 = SwiGLU(d_model, expansion=ff_expansion, bias=False)
+        self.ff_2 = SwiGLU(d_model, expansion=ff_expansion, bias=False)
+        self.ff_3 = SwiGLU(d_model, expansion=ff_expansion, bias=False)
 
         # AdaLN projection: conditioning vector → 4 vectors (s1, b1, s2, b2)
         # initialized to zero so conditioning is identity at start of training
@@ -108,16 +113,20 @@ class AdaLNBlock_Transformer(nn.Module):
         h = self.norm1(x) * (1 + s1) + b1
         attn_out, _ = self.attn1(h, h, h, attn_mask=mask)
         x = x + attn_out                       # hint: residual connection
+        x = x + self.ff_1(x)
 
-        attn_out, _ = self.attn2(x, x, x, attn_mask=mask)
+        h = self.norm2(x) * (1 + s1) + b1
+        attn_out, _ = self.attn2(h, h, h, attn_mask=mask)
         x = x + attn_out
+        x = x + self.ff_2(x)
 
-        attn_out, _ = self.attn3(x, x, x, attn_mask=mask)
+        h = self.norm3(x) * (1 + s1) + b1
+        attn_out, _ = self.attn3(h, h, h, attn_mask=mask)
         x = x + attn_out
 
         # Feedforward with AdaLN
-        h = self.norm2(x) * (1 + s2) + b2
-        x = x + self.ff(h)                     # hint: residual connection
+        h = self.norm4(x) * (1 + s2) + b2
+        x = x + self.ff_3(h)                     # hint: residual connection
 
         return x
 
