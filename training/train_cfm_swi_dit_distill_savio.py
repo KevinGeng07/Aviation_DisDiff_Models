@@ -53,6 +53,13 @@ the EMA student unless noted:
     val_minfde_rough                           minFDE@5 on 5 val batches (metres)
     val_minfde                                 minFDE@5 on 20 val batches, every 5 epochs
 
+Multi-GPU: launched with torchrun (--nproc_per_node=N), the student trains with
+DistributedDataParallel on N GPUs of one node. --batch_size stays the TOTAL batch
+(each GPU takes batch_size / N), so lr, warmup and steps per epoch are the same as a
+1-GPU run. Rank 0 alone validates, logs and writes checkpoints (saved without the DDP
+wrapper, so they load exactly like 1-GPU checkpoints). Launched plainly with python,
+nothing changes.
+
 Reproducibility: --seed fixes the train/val/test aircraft split (via
 get_dataloaders) and Python/NumPy/PyTorch RNGs. The torch RNG is re-seeded
 with (seed + epoch) at the start of every epoch, so batch order and the CFM
@@ -67,8 +74,12 @@ import json
 import os
 import random
 import time
+from datetime import timedelta
 import torch
+import torch.distributed as dist
 import torch.nn as nn
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.data import DataLoader, DistributedSampler
 import numpy as np
 from pathlib import Path
 from torch.optim import AdamW
@@ -102,6 +113,27 @@ def set_seed(seed):
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+
+
+def setup_distributed():
+    """(rank, local_rank, world_size). Starts the process group only under torchrun
+    (WORLD_SIZE > 1); a plain `python train...py` run is rank 0 of 1, as before."""
+    world_size = int(os.environ.get("WORLD_SIZE", 1))
+    if world_size == 1:
+        return 0, 0, 1
+    local_rank = int(os.environ["LOCAL_RANK"])
+    if torch.cuda.is_available():
+        torch.cuda.set_device(local_rank)
+    # long timeout: other ranks wait at a barrier while rank 0 validates
+    # (gloo = CPU fallback, only for testing the multi-process path off-cluster)
+    dist.init_process_group("nccl" if torch.cuda.is_available() else "gloo",
+                            timeout=timedelta(minutes=60))
+    return dist.get_rank(), local_rank, world_size
+
+
+def barrier(world_size, local_rank):
+    if world_size > 1:
+        dist.barrier(device_ids=[local_rank] if torch.cuda.is_available() else None)
 
 
 def resolve_path(path):
@@ -359,6 +391,11 @@ def train(
     device         = "cuda",
     subset         = None,
 ):
+    rank, local_rank, world_size = setup_distributed()
+    is_main = rank == 0
+    log     = print if is_main else (lambda *a, **k: None)   # only rank 0 prints
+    if batch_size % world_size:
+        raise ValueError(f"--batch_size {batch_size} must divide evenly over {world_size} GPUs")
     set_seed(seed)
 
     teacher_cfg  = load_config(teacher_config)
@@ -368,26 +405,39 @@ def train(
     teacher_ckpt = resolve_path(teacher_ckpt or teacher_cfg["checkpoint"])
 
     output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    for name, cfg in (("teacher_config.json", teacher_cfg), ("student_config.json", student_cfg)):
-        with open(output_dir / name, "w") as f:
-            json.dump(cfg, f, indent=2)
+    if is_main:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        for name, cfg in (("teacher_config.json", teacher_cfg), ("student_config.json", student_cfg)):
+            with open(output_dir / name, "w") as f:
+                json.dump(cfg, f, indent=2)
     metrics_path = output_dir / "metrics.csv"
 
-    device = torch.device(device if torch.cuda.is_available() else "cpu")
-    print(f"Training on {device} — CFM + SWI_DiT distillation "
+    if world_size > 1 and torch.cuda.is_available():
+        device = torch.device("cuda", local_rank)
+    else:
+        device = torch.device(device if torch.cuda.is_available() else "cpu")
+    log(f"Training on {device} x {world_size} GPU(s) — CFM + SWI_DiT distillation "
           f"({teacher_cfg.get('name', 'teacher')} → {student_cfg.get('name', 'student')}, "
           f"alpha={alpha}, turn_weight={turn_weight}, time_weighting={time_weighting}, seed={seed})")
 
     # seed controls the aircraft-level train/val/test split
     # default: one DataLoader worker per CPU Slurm gave the job (falls back to 4 off-cluster)
+    # (with N GPUs the job's CPUs are shared: each process gets CPUs / N workers)
     if num_workers is None:
-        num_workers = int(os.environ.get("SLURM_CPUS_PER_TASK", 4))
+        num_workers = max(1, int(os.environ.get("SLURM_CPUS_PER_TASK", 4)) // world_size)
     train_loader, val_loader, test_loader = get_dataloaders(
         nc_path, batch_size=batch_size, seed=seed, subset=subset, num_workers=num_workers,
     )
-    print(f"Batches per epoch: {len(train_loader):,} train, {len(val_loader):,} val "
-          f"(batch_size={batch_size}, num_workers={num_workers})", flush=True)
+    train_sampler = None
+    if world_size > 1:
+        # each GPU gets a different 1/N of the shuffled training set, batch_size / N per step
+        train_sampler = DistributedSampler(train_loader.dataset, num_replicas=world_size,
+                                           rank=rank, shuffle=True, seed=seed)
+        train_loader  = DataLoader(train_loader.dataset, batch_size=batch_size // world_size,
+                                   sampler=train_sampler, num_workers=num_workers, pin_memory=True)
+    log(f"Batches per epoch: {len(train_loader):,} train, {len(val_loader):,} val "
+        f"(batch_size={batch_size} total, {batch_size // world_size} per GPU, "
+        f"num_workers={num_workers} per GPU)", flush=True)
 
     import netCDF4 as nc
     ds       = nc.Dataset(nc_path, "r")
@@ -397,13 +447,13 @@ def train(
 
     # ── Teacher (frozen) ──────────────────────────────────────────────────
     teacher, teacher_epoch, teacher_ckpt_fde = load_teacher(teacher_cfg, teacher_ckpt, device)
-    print(f"Teacher: {teacher_ckpt} (epoch={teacher_epoch}, ckpt val_fde={teacher_ckpt_fde}) "
+    log(f"Teacher: {teacher_ckpt} (epoch={teacher_epoch}, ckpt val_fde={teacher_ckpt_fde}) "
           f"| {teacher_cfg['model']} | {sum(p.numel() for p in teacher.parameters()):,} params")
 
     # ── Student ───────────────────────────────────────────────────────────
     model = build_model(student_cfg).to(device)
     ema   = EMA(model, decay=0.9999)
-    print(f"Student: {student_cfg.get('arch', 'swi_dit')} {student_cfg['model']} | {sum(p.numel() for p in model.parameters()):,} params")
+    log(f"Student: {student_cfg.get('arch', 'swi_dit')} {student_cfg['model']} | {sum(p.numel() for p in model.parameters()):,} params")
 
     optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     scheduler = CosineAnnealingLR(optimizer, T_max=epochs)
@@ -418,6 +468,7 @@ def train(
         "batch_size":   batch_size,
         "lr":           lr,
         "epochs":       epochs,
+        "world_size":   world_size,
     }
 
     norm_gt     = LossNormalizer()
@@ -428,7 +479,7 @@ def train(
     global_step = 0
     last_ckpt   = output_dir / "last.pt"
     if last_ckpt.exists():
-        print(f"Resuming from {last_ckpt}...")
+        log(f"Resuming from {last_ckpt}...")
         ckpt = torch.load(last_ckpt, map_location=device, weights_only=False)
         model.load_state_dict(ckpt["model_state"])
         ema.shadow.load_state_dict(ckpt["ema_state"])
@@ -440,14 +491,32 @@ def train(
         norm_kd.scale = ckpt.get("loss_scale_kd")
         global_step = ckpt.get("global_step", global_step)
         start_epoch = ckpt["epoch"] + 1
-        print(f"Resumed at epoch {start_epoch}")
+        log(f"Resumed at epoch {start_epoch}")
+
+    # DDP wraps the student for training only; `model` stays the plain module, used for
+    # EMA, checkpoints and grad clipping (its grads are the averaged DDP grads)
+    if world_size > 1:
+        # find_unused_parameters: TrajectoryDiT has a top-level adaLN that forward() never
+        # uses (each block has its own); kept so existing checkpoints still load
+        train_model = DDP(model, device_ids=[local_rank] if device.type == "cuda" else None,
+                          find_unused_parameters=True)
+    else:
+        train_model = model
 
     # Teacher reference on the same val batches the student is scored on
-    teacher_fde = validate(teacher, val_loader, device, feat_std, seed, max_batches=20)
-    print(f"Teacher val minFDE (this split): {teacher_fde:.1f}m", flush=True)
+    teacher_fde = None
+    if is_main:
+        teacher_fde = validate(teacher, val_loader, device, feat_std, seed, max_batches=20)
+        log(f"Teacher val minFDE (this split): {teacher_fde:.1f}m", flush=True)
+    barrier(world_size, local_rank)
 
     for epoch in range(start_epoch, epochs):
-        torch.manual_seed(seed + epoch)    # same batch order / noise per epoch, even after resume
+        # same batch order / noise per epoch, even after resume; each GPU draws its own
+        # noise (rank 0 = the 1-GPU sequence)
+        torch.manual_seed(seed + epoch + 100003 * rank)
+        if train_sampler is not None:
+            train_sampler.set_epoch(epoch)
+
         epoch_start = time.time()
         epoch_lr    = optimizer.param_groups[0]["lr"]
         model.train()
@@ -461,7 +530,7 @@ def train(
 
             t                 = sample_flow_time(obs.shape[0], device=str(device))
             x_t, noise, v_tgt = forward_cfm(fut, t)
-            v_pred            = model(obs, x_t, t, t_rel)
+            v_pred            = train_model(obs, x_t, t, t_rel)
 
             with torch.no_grad():
                 v_teacher = teacher(obs, x_t, t, t_rel)
@@ -470,9 +539,15 @@ def train(
             loss_gt  = weighted_mse(v_pred, v_tgt, sample_w, time_weighting)
             loss_kd  = weighted_mse(v_pred, v_teacher, sample_w, time_weighting)
 
-            # Normalize each term by its running size, then weight
-            norm_gt.update(loss_gt)
-            norm_kd.update(loss_kd)
+            # Normalize each term by its running size, then weight. With several GPUs
+            # the running sizes come from the all-GPU mean, so every GPU uses the same
+            # scales (and so the same loss) — the logged values are the all-GPU mean too.
+            loss_vals = torch.stack([loss_gt.detach(), loss_kd.detach()])
+            if world_size > 1:
+                dist.all_reduce(loss_vals)
+                loss_vals /= world_size
+            norm_gt.update(loss_vals[0])
+            norm_kd.update(loss_vals[1])
             loss    = alpha * norm_gt(loss_gt) + (1 - alpha) * norm_kd(loss_kd)
 
             optimizer.zero_grad()
@@ -486,9 +561,10 @@ def train(
                     pg["lr"] = lr * lr_scale
 
             ema.update(model)
-            total_loss  += loss.item()
-            total_gt    += loss_gt.item()
-            total_kd    += loss_kd.item()
+            total_loss  += (alpha * loss_vals[0] / (norm_gt.scale + norm_gt.eps)
+                            + (1 - alpha) * loss_vals[1] / (norm_kd.scale + norm_kd.eps)).item()
+            total_gt    += loss_vals[0].item()
+            total_kd    += loss_vals[1].item()
             n_batches   += 1
             global_step += 1
 
@@ -497,7 +573,7 @@ def train(
                 elapsed = time.time() - epoch_start
                 rate    = n_batches / elapsed
                 eta     = (len(train_loader) - n_batches) / rate
-                print(f"  epoch {epoch+1:03d} | batch {n_batches:,}/{len(train_loader):,} "
+                log(f"  epoch {epoch+1:03d} | batch {n_batches:,}/{len(train_loader):,} "
                       f"({100 * n_batches / len(train_loader):.1f}%) | "
                       f"loss {total_loss / n_batches:.4f} (gt {total_gt / n_batches:.4f}, "
                       f"kd {total_kd / n_batches:.4f}) | {rate:.1f} it/s | "
@@ -505,6 +581,11 @@ def train(
                       flush=True)
 
         scheduler.step()
+
+        # ── Per-epoch metrics, checkpoints: rank 0 only; the others wait ─
+        if not is_main:
+            barrier(world_size, local_rank)
+            continue
 
         # ── Per-epoch student metrics (EMA weights) ───────────────────────
         val_loss, val_gt, val_kd = validate_losses(
@@ -569,11 +650,15 @@ def train(
         append_metrics(metrics_path, metrics)
         torch.save(checkpoint, output_dir / "last.pt")
 
-        print(f"Epoch {epoch+1:03d} | "
-              f"train {metrics['train_loss']} (gt {metrics['train_loss_gt']}, kd {metrics['train_loss_kd']}) | "
-              f"val {metrics['val_loss']} (gt {metrics['val_loss_gt']}, kd {metrics['val_loss_kd']}) | "
-              f"KL end {metrics['val_kl_endpoint']} path {metrics['val_kl_path']} | {fde_str}",
-              flush=True)
+        log(f"Epoch {epoch+1:03d} | "
+            f"train {metrics['train_loss']} (gt {metrics['train_loss_gt']}, kd {metrics['train_loss_kd']}) | "
+            f"val {metrics['val_loss']} (gt {metrics['val_loss_gt']}, kd {metrics['val_loss_kd']}) | "
+            f"KL end {metrics['val_kl_endpoint']} path {metrics['val_kl_path']} | {fde_str}",
+            flush=True)
+        barrier(world_size, local_rank)
+
+    if world_size > 1:
+        dist.destroy_process_group()
 
 
 if __name__ == "__main__":

@@ -57,11 +57,12 @@ BATCH_SIZE=${BATCH_SIZE:-256}
 SEED=${SEED:-42}
 TURN_WEIGHT=${TURN_WEIGHT:-0}     # extra loss weight for turning windows (0 = off)
 TIME_WEIGHTING=${TIME_WEIGHTING:-step}   # step (last quarter x2) | linear (continuous 1 -> 2)
+NGPUS=${NGPUS:-1}                 # >1 → torchrun + DistributedDataParallel (submit_distill_run.sh --gpus N)
 # one output folder per run: runs must never share last.pt / best.pt / metrics.csv
 # (submit_distill_run.sh passes OUTPUT_DIR=<save_dir>/model; this is only the fallback)
 OUTPUT_DIR=${OUTPUT_DIR:-$REPO/training/checkpoints/$RUN_NAME}
 
-echo "Run: $RUN_NAME | student: $STUDENT_CONFIG | alpha=$ALPHA | epochs=$EPOCHS | batch=$BATCH_SIZE | seed=$SEED | turn_weight=$TURN_WEIGHT | time_weighting=$TIME_WEIGHTING"
+echo "Run: $RUN_NAME | student: $STUDENT_CONFIG | gpus=$NGPUS | alpha=$ALPHA | epochs=$EPOCHS | batch=$BATCH_SIZE | seed=$SEED | turn_weight=$TURN_WEIGHT | time_weighting=$TIME_WEIGHTING"
 echo "Output: $OUTPUT_DIR"
 [ -f "$STUDENT_CONFIG" ] || { echo "Student config not found: $STUDENT_CONFIG"; exit 1; }
 
@@ -92,7 +93,13 @@ cd $REPO/training
 
 # -u: unbuffered stdout so per-epoch lines appear in logs/ as they happen.
 # Per-epoch student metrics are also appended to $OUTPUT_DIR/metrics.csv.
-$PYTHON -u train_cfm_swi_dit_distill_savio.py \
+# With NGPUS > 1, torchrun starts one training process per GPU on this node.
+if [ "$NGPUS" -gt 1 ]; then
+    LAUNCH=($PYTHON -u -m torch.distributed.run --standalone --nproc_per_node=$NGPUS)
+else
+    LAUNCH=($PYTHON -u)
+fi
+"${LAUNCH[@]}" train_cfm_swi_dit_distill_savio.py \
     --nc_path $NC_PATH \
     --teacher_config $REPO/configs/swi_dit_teacher.json \
     --student_config $STUDENT_CONFIG \
