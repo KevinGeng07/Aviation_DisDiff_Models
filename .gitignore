@@ -9,3 +9,6 @@ Data/adsb/
 # matches checkpoints/ at any depth, incl. training/checkpoints/
 checkpoints/
 checkpoints_cfm/
+
+# macOS
+.DS_Store

@@ -1,0 +1,18 @@
+{
+  "name": "dit_cfm_20M",
+  "arch": "dit_cfm",
+  "comment": "CITRIS flow_v5 architecture (TrajectoryFlowV5). Put its best.pt at 'checkpoint' (a CITRIS checkpoint loads as is), or train it: bash savio/stage1_teacher.sh --retrain configs/teacher_dit_cfm_20M.json amp: run this model in fp16 autocast on CUDA by default (training-time teacher calls and eval sampling); eval --no-amp turns it off.",
+  "checkpoint": "finished_ckpt/1_teacher/dit_cfm_20M/best.pt",
+  "amp": true,
+  "model": {
+    "obs_len": 43,
+    "fut_len": 43,
+    "in_dim": 6,
+    "d_model": 384,
+    "n_heads": 8,
+    "n_layers": 8,
+    "dropout": 0.1,
+    "use_pos_emb": true,
+    "use_attn_mask": true
+  }
+}

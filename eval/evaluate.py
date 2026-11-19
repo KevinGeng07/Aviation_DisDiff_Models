@@ -3,16 +3,19 @@ Evaluate finished CFM SWI_DiT checkpoints on the test set.
 
 Usage (from the repo root):
     python eval/evaluate.py                                   # every model in finished_ckpt/
-    python eval/evaluate.py finished_ckpt/SWi_DiT/6_2_128_SWiDiT   # or folders given on the command line
+    python eval/evaluate.py finished_ckpt/2_architecture      # one pipeline stage
+    python eval/evaluate.py finished_ckpt/2_architecture/distill_4_256 --device mps
+    python eval/evaluate.py checkpoints/swi_dit --ckpt best_swi_dit.pt   # the preset teacher
     python eval/evaluate.py --n_samples 20 --max_batches 10
 
 With no folders, every folder under finished_ckpt/ holding best.pt (or --ckpt) is one
-model, e.g. finished_ckpt/SWi_DiT/6_4_256_SWiDiT/model and each round of
-finished_ckpt/SWi_DiT/6_4_256_Progressive/model/steps_NN; models are named after the
-folder above model/. A folder given on the command line can be the run folder itself
+model, e.g. finished_ckpt/2_architecture/distill_4_256/model and each round of
+finished_ckpt/5_stepwise/progressive_4_256/model/steps_NN; models are named after the
+folder above model/. Every model is scored on the test aircraft of its run's split seed
+(train_config split_seed, 42 throughout the pipeline), so they share one test set. A folder given on the command line can be the run folder itself
 or any parent of it. A checkpoint that was split to fit GitHub's file limit
-(finished_ckpt/compress_ckpts.py's best.pt.gz.part000 + best.pt.manifest.json, or
-best_0.pt, best_1.pt, ... or best.pt.part_aa, ...) is joined in memory automatically. Progressive-distillation students are sampled with their own
+(finished_ckpt/compress_ckpts.py's best.pt.gz.part000 + best.pt.manifest.json, or the
+older best_0.pt, best_1.pt, ... / best.pt.part_aa, ...) is joined in memory automatically. Progressive-distillation students are sampled with their own
 step count (stored in the checkpoint) instead of --n_steps.
 
 For every test window the model samples K possible futures (K = --n_samples).
@@ -28,7 +31,7 @@ Errors are distances in metres between predicted and true (x, y) positions:
 So you get minADE, minFDE, avgADE, avgFDE, each averaged over all test windows,
 and minFDE_turn / avgFDE_turn: the same over only the windows whose true future
 turns >= --turn_deg (default 45°) away from the last observed heading
-(training/turn_weighting.py), since that is where the models under-turn.
+(training/loss_weighting.py), since that is where the models under-turn.
 """
 import argparse
 import hashlib
@@ -47,9 +50,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from DataLoaders.ADSBdataset import get_dataloaders
-from models.registry import build_model
+from models.registry import build_model, model_weights
 from models.cfm import euler_sample
-from training.turn_weighting import turn_angle
+from training.loss_weighting import turn_angle
 
 def find_run_folders(ckpt_name, root=ROOT / "finished_ckpt"):
     """Every folder under root holding ckpt_name (or split pieces of it) — one per model."""
@@ -60,7 +63,7 @@ def find_run_folders(ckpt_name, root=ROOT / "finished_ckpt"):
 
 
 def model_name(folder, n_steps=None):
-    """finished_ckpt/SWi_DiT/6_4_256_SWiDiT/model → 6_4_256_SWiDiT (the folder above model/);
+    """finished_ckpt/2_architecture/distill_4_256/model → distill_4_256 (the folder above model/);
     progressive rounds (.../model/steps_NN) get _<n>step."""
     parts = Path(folder).resolve().parts
     if "model" in parts[1:]:
@@ -129,40 +132,55 @@ def load_checkpoint(folder, ckpt_name, device):
         ckpt_path = pieces[0].parent / ckpt_name
         return torch.load(io.BytesIO(data), map_location=device, weights_only=False), ckpt_path
 
-    # content split by training/split_checkpoint.py: the weights half is all eval needs
-    weights = find_file(folder, f"{Path(ckpt_name).stem}_weights.pt")
-    if weights is not None:
-        return torch.load(weights, map_location=device, weights_only=False), weights
-
     sys.exit(f"No {ckpt_name} (or split pieces of it) found under {folder}")
 
 
 def load_model(folder, ckpt_name, device):
     ckpt, ckpt_path = load_checkpoint(folder, ckpt_name, device)
 
-    # model size: student_config.json next to the checkpoint, else the copy saved inside it
+    # architecture: student_config.json next to the checkpoint, else the copy saved inside it,
+    # else the configs/teacher*.json whose "checkpoint" is this file
     cfg_path = ckpt_path.parent / "student_config.json"
+    teachers = [json.loads(p.read_text()) for p in sorted((ROOT / "configs").glob("teacher*.json"))]
+    named    = [c for c in teachers
+                if (ROOT / c.get("checkpoint", "-")).resolve() == ckpt_path.resolve()]
     if cfg_path.exists():
         cfg = json.loads(cfg_path.read_text())
     elif ckpt.get("student_config"):
         cfg = ckpt["student_config"]
+    elif named:
+        cfg = named[0]
     else:
         sys.exit(f"No student_config.json next to {ckpt_path} and none stored in the checkpoint")
 
     model = build_model(cfg).to(device)
-    model.load_state_dict(ckpt.get("ema_state") or ckpt["model_state"])   # EMA weights, like training's val
+    model.load_state_dict(model_weights(ckpt))   # EMA weights if saved, like training's val
     model.eval()
 
-    seed = ckpt.get("train_config", {}).get("seed", 42)
-    print(f"Checkpoint: {ckpt_path} (epoch {ckpt.get('epoch')})")
-    print(f"Model: {cfg['model']} | {sum(p.numel() for p in model.parameters()):,} params")
-    return model, seed, ckpt.get("n_steps")   # n_steps: set by progressive distillation
+    # the split seed decides the test aircraft; older checkpoints only stored "seed" (= split then)
+    train_config = ckpt.get("train_config", {})
+    split_seed   = train_config.get("split_seed", train_config.get("seed", 42))
+    model.default_amp = bool(cfg.get("amp")) and device.type == "cuda"   # config "amp": CUDA only
+    print(f"Checkpoint: {ckpt_path} (epoch {ckpt.get('epoch')})"
+          f"{' | fp16 sampling by default (--no-amp to turn off)' if model.default_amp else ''}")
+    print(f"Model: {cfg.get('arch', 'swi_dit')} {cfg['model']} | "
+          f"{sum(p.numel() for p in model.parameters()):,} params")
+    return model, split_seed, ckpt.get("n_steps")   # n_steps: set by progressive distillation
 
 
-def sample(model, obs, t_rel, n_samples, n_steps, device, chunk=256):
+AMP_DTYPES = {"cuda": torch.float16, "mps": torch.float16, "cpu": torch.bfloat16}
+
+
+def sample(model, obs, t_rel, n_samples, n_steps, device, chunk=256, amp=False):
     """euler_sample, running up to `chunk` trajectories per model call. If that runs out of
     GPU memory, halve the chunk and retry with the same random state, so the sampled
-    futures are identical whatever chunk size ends up working. Returns (preds, chunk used)."""
+    futures are identical whatever chunk size ends up working. Returns (preds, chunk used).
+    amp=True runs the model in half precision (fp16 on GPU, bf16 on CPU): about half the
+    activation memory and faster on tensor-core GPUs; results change slightly, not exactly."""
+    if amp:
+        with torch.autocast(device_type=device.type, dtype=AMP_DTYPES[device.type]):
+            preds, chunk = sample(model, obs, t_rel, n_samples, n_steps, device, chunk)
+        return preds.float(), chunk
     while True:
         cpu_state  = torch.get_rng_state()
         cuda_state = torch.cuda.get_rng_state(device) if device.type == "cuda" else None
@@ -181,7 +199,7 @@ def sample(model, obs, t_rel, n_samples, n_steps, device, chunk=256):
 
 
 def evaluate(model, test_loader, feat_mean, feat_std, device, n_samples, n_steps, max_batches,
-             turn_deg=45.0, chunk=256):
+             turn_deg=45.0, chunk=256, amp=False):
     mean_t = torch.tensor(feat_mean, device=device, dtype=torch.float32)
     std_t  = torch.tensor(feat_std,  device=device, dtype=torch.float32)
     std_xy = std_t[:2]
@@ -198,7 +216,7 @@ def evaluate(model, test_loader, feat_mean, feat_std, device, n_samples, n_steps
             fut   = batch["fut"].to(device)
             t_rel = batch["t_rel"].to(device)
 
-            preds, chunk = sample(model, obs, t_rel, n_samples, n_steps, device, chunk)  # (K, B, 43, 6)
+            preds, chunk = sample(model, obs, t_rel, n_samples, n_steps, device, chunk, amp)  # (K, B, 43, 6)
 
             # back to metres: only x, y; the mean cancels in a difference, so multiply by std
             pred_xy = preds[..., :2] * std_xy            # (K, B, 43, 2)
@@ -233,8 +251,19 @@ def evaluate(model, test_loader, feat_mean, feat_std, device, n_samples, n_steps
     return results, n_windows, n_turn
 
 
-def main(device=None):
-    """Parse args and evaluate every folder. device=None → CUDA if available, else CPU."""
+def pick_device(name):
+    """auto → CUDA if available, else Apple MPS, else CPU."""
+    if name != "auto":
+        return torch.device(name)
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
+def main():
+    """Parse args and evaluate every folder."""
     parser = argparse.ArgumentParser(description="Test-set ADE/FDE for finished checkpoints")
     parser.add_argument("folders", nargs="*", help="run folders (default: every model in finished_ckpt/)")
     parser.add_argument("--nc_path", default=str(ROOT / "Data" / "trajectories_adsblol_seq86_stage2.nc"))
@@ -251,6 +280,10 @@ def main(device=None):
     parser.add_argument("--turn_deg", type=float, default=45.0,
                         help="windows turning at least this much count for the *_turn metrics")
     parser.add_argument("--out", default=None, help="also save the results to this JSON file")
+    parser.add_argument("--device", default="auto", help="auto (CUDA, else MPS, else CPU), cuda, mps or cpu")
+    parser.add_argument("--amp", action=argparse.BooleanOptionalAction, default=None,
+                        help="sample in half precision: less memory, faster on GPU, slightly different "
+                             "numbers. Default: on for models whose config says amp (on CUDA), else off")
     args = parser.parse_args()
 
     folders = [f if Path(f).is_absolute() or Path(f).exists() else ROOT / f
@@ -261,8 +294,7 @@ def main(device=None):
     # a parent folder holding several checkpoints (e.g. every progressive round) → one entry each
     folders = [run for f in folders for run in (find_run_folders(args.ckpt, f) or [f])]
 
-    if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = pick_device(args.device)
     print(f"Device: {device}")
     ds = nc.Dataset(args.nc_path, "r")
     feat_mean = np.array(ds.feature_mean)
@@ -282,7 +314,8 @@ def main(device=None):
         torch.manual_seed(0)   # same sampling noise for every model → comparable numbers
         results, n, n_turn = evaluate(model, test_loaders[seed], feat_mean, feat_std, device,
                                       args.n_samples, ckpt_steps or args.n_steps,
-                                      args.max_batches, args.turn_deg, args.chunk)
+                                      args.max_batches, args.turn_deg, args.chunk,
+                                      model.default_amp if args.amp is None else args.amp)
         all_results[model_name(folder, ckpt_steps)] = results
         for name, value in results.items():
             print(f"  {name}: {value:8.1f} m")

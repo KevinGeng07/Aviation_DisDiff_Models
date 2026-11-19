@@ -1,0 +1,759 @@
+"""
+Knowledge distillation for CFM + SWI_DiT: frozen teacher → smaller student.
+Used by pipeline stages 2 (architectures), 3 (GRU), 4 (RoPE) and 6 (loss weighting):
+the student's architecture comes from its config's "arch" (models/registry.py).
+
+Teacher and student architectures come from separate JSON config files
+(configs/teacher_dit_cfm_20M.json, configs/students/*.json), passed with --teacher_config /
+--student_config. The teacher config also names the trained checkpoint to load
+(overridable with --teacher_ckpt).
+
+The teacher is frozen (EMA weights, eval mode). The student is trained with
+the standard CFM setup (same flow-time sampling, interpolation, endpoint
+weighting, optimizer, EMA, validation) plus a term matching the teacher's
+velocity.
+
+Distillation loss (both terms use the same endpoint-weighted MSE as the
+standard CFM loss: last quarter of the future horizon weighted ×2):
+
+    x_t      = (1 - t)·noise + t·fut              (shared by student and teacher)
+    v_tgt    = fut - noise                        (ground-truth CFM target)
+    v_s      = student(obs, x_t, t, t_rel)
+    v_T      = teacher(obs, x_t, t, t_rel)        (no grad, eval mode)
+
+    L_gt     = weighted_mse(v_s, v_tgt)           ("normal" CFM loss)
+    L_kd     = weighted_mse(v_s, v_T)
+    L        = alpha · L_gt / s_gt + (1 - alpha) · L_kd / s_kd     (default alpha = 0.7)
+
+L_gt and L_kd differ in size by ~20× (L_gt keeps the irreducible noise of the
+CFM target; L_kd only measures the student-teacher gap), so with raw losses
+alpha would not set their relative weight. Each is therefore normalized by
+s_gt / s_kd, an EMA of its own recent (detached) value, so both terms are ~1
+and alpha sets their real share of the gradient: 0.7 ground truth, 0.3 teacher.
+
+Loss weighting (training/loss_weighting.py; validation losses stay unweighted so they
+compare across runs):
+  --turn_weight S, --turn_mode continuous|step, --turn_threshold DEG
+      weight each window by how much its true future turns, in both terms (S = 0: off)
+  --z_weight W
+      weight the altitude features (z, vz) W× the horizontal ones (W = 1: off)
+
+--time_weighting picks the weight over the future horizon: 'step' (default, the
+standard last-quarter ×2) or 'linear' (continuous ramp 1 → 2 from the first to the
+last future step). Validation losses always use 'step' so they compare across runs.
+
+Per-epoch metrics (printed and appended to <output_dir>/metrics.csv), all for
+the EMA student unless noted:
+    train_loss, train_loss_gt, train_loss_kd   averaged over the epoch (raw student);
+                                               train_loss is the normalized total,
+                                               _gt / _kd are the raw (unnormalized) terms
+    val_loss, val_loss_gt, val_loss_kd         same losses on validation batches
+                                               (val_loss uses the current scales)
+    loss_scale_gt, loss_scale_kd               the normalizers s_gt / s_kd at epoch end
+    val_kl_endpoint, val_kl_path               KL(teacher ‖ student) between Gaussians
+                                               fitted to K sampled (x, y) positions,
+                                               at the final step / averaged over all
+                                               future steps (nats, lower = closer)
+    val_minfde_rough                           minFDE@5 on 5 val batches (metres)
+    val_minfde                                 minFDE@5 on 20 val batches, every 5 epochs
+
+Multi-GPU: launched with torchrun (--nproc_per_node=N), the student trains with
+DistributedDataParallel on N GPUs of one node. --batch_size stays the TOTAL batch
+(each GPU takes batch_size / N), so lr, warmup and steps per epoch are the same as a
+1-GPU run. Rank 0 alone validates, logs and writes checkpoints (saved without the DDP
+wrapper, so they load exactly like 1-GPU checkpoints). Launched plainly with python,
+nothing changes.
+
+Reproducibility: --split_seed fixes the train/val/test aircraft split (keep 42 so every
+run, and eval, uses the same test aircraft); --seed fixes the Python/NumPy/PyTorch RNGs,
+so different --seed values vary only the training randomness. The torch RNG is re-seeded
+with (seed + epoch) at the start of every epoch, so batch order and the CFM
+noise / flow times of a given epoch are the same whether or not the run was
+resumed from last.pt. Validation metrics use fixed seeds, so they are
+comparable across epochs.
+"""
+
+import argparse
+import csv
+import json
+import os
+import random
+import time
+from datetime import timedelta
+import torch
+import torch.distributed as dist
+import torch.nn as nn
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.data import DataLoader, DistributedSampler
+import numpy as np
+from pathlib import Path
+from torch.optim import AdamW
+from torch.optim.lr_scheduler import CosineAnnealingLR
+from copy import deepcopy
+
+import sys
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from DataLoaders.ADSBdataset import get_dataloaders
+from models.registry import build_model, model_weights, maybe_amp
+from models.cfm import sample_flow_time, forward_cfm, euler_sample
+from training.loss_weighting import (turn_weights, feature_weights, feature_stats,
+                                     TURN_MODES)
+
+CHECKPOINT_DIR = ROOT / "training" / "checkpoints"
+
+
+METRIC_FIELDS = [
+    "epoch", "lr", "epoch_time_s",
+    "train_loss", "train_loss_gt", "train_loss_kd",
+    "val_loss", "val_loss_gt", "val_loss_kd",
+    "val_kl_endpoint", "val_kl_path",
+    "val_minfde_rough", "val_minfde",
+    "loss_scale_gt", "loss_scale_kd",
+]
+
+
+def set_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+
+def setup_distributed():
+    """(rank, local_rank, world_size). Starts the process group only under torchrun
+    (WORLD_SIZE > 1); a plain `python train...py` run is rank 0 of 1, as before."""
+    world_size = int(os.environ.get("WORLD_SIZE", 1))
+    if world_size == 1:
+        return 0, 0, 1
+    local_rank = int(os.environ["LOCAL_RANK"])
+    if torch.cuda.is_available():
+        torch.cuda.set_device(local_rank)
+    # long timeout: other ranks wait at a barrier while rank 0 validates
+    # (gloo = CPU fallback, only for testing the multi-process path off-cluster)
+    dist.init_process_group("nccl" if torch.cuda.is_available() else "gloo",
+                            timeout=timedelta(minutes=60))
+    return dist.get_rank(), local_rank, world_size
+
+
+def barrier(world_size, local_rank):
+    if world_size > 1:
+        dist.barrier(device_ids=[local_rank] if torch.cuda.is_available() else None)
+
+
+def resolve_path(path):
+    """Paths in configs may be relative to the repo root (training jobs often cd elsewhere)."""
+    path = Path(path)
+    if path.is_absolute() or path.exists():
+        return path
+    return ROOT / path
+
+
+def load_config(path):
+    with open(resolve_path(path)) as f:
+        cfg = json.load(f)
+    if "model" not in cfg:
+        raise ValueError(f"{path}: config needs a 'model' section of TrajectoryDiT kwargs")
+    return cfg
+
+
+class EMA:
+    def __init__(self, model, decay=0.9999):
+        self.decay  = decay
+        self.shadow = deepcopy(model)
+        self.shadow.eval()
+
+    def update(self, model):
+        with torch.no_grad():
+            for s_param, param in zip(self.shadow.parameters(), model.parameters()):
+                s_param.data = self.decay * s_param.data + (1 - self.decay) * param.data
+
+    def __call__(self, *args, **kwargs):
+        return self.shadow(*args, **kwargs)
+
+
+class LossNormalizer:
+    """
+    Running scale of a loss term: an EMA of its detached value. Dividing the
+    loss by this scale keeps the term ~1 without changing its gradient
+    direction, so terms of very different sizes can be weighted by alpha.
+    """
+    def __init__(self, decay=0.99, eps=1e-8):
+        self.decay = decay
+        self.eps   = eps
+        self.scale = None           # set from the first batch
+
+    def update(self, loss):
+        value = loss.detach().item()
+        if self.scale is None:
+            self.scale = value
+        else:
+            self.scale = self.decay * self.scale + (1 - self.decay) * value
+
+    def __call__(self, loss):
+        return loss / (self.scale + self.eps)
+
+
+TIME_WEIGHTINGS = ("step", "linear")
+
+
+def time_weights(fut_len, mode="step", device=None):
+    """Per-future-step loss weights, shape (fut_len,).
+    step   (standard): 1 for the first 3/4 of the horizon, 2 for the last quarter.
+    linear (continuous): ramps evenly from 1 at the first future step to 2 at the last."""
+    if mode == "step":
+        weights = torch.ones(fut_len, device=device)
+        weights[-fut_len // 4:] = 2.0
+        return weights
+    if mode == "linear":
+        return torch.linspace(1.0, 2.0, fut_len, device=device)
+    raise ValueError(f"unknown time weighting {mode!r}; known: {', '.join(TIME_WEIGHTINGS)}")
+
+
+def weighted_mse(pred, target, sample_w=None, time_weighting="step", feat_w=None):
+    """CFM loss: MSE weighted over the future horizon by time_weights(time_weighting)
+    (standard = 'step': last quarter ×2).
+    sample_w: optional (B,) per-window weights with mean 1 (e.g. turn_weights).
+    feat_w:   optional (in_dim,) per-feature weights with mean 1 (e.g. feature_weights)."""
+    weights = time_weights(pred.shape[1], time_weighting, pred.device)
+    loss_plain = nn.functional.mse_loss(pred, target, reduction="none")
+    loss_plain = loss_plain * weights[None, :, None]
+    if sample_w is not None:
+        loss_plain = loss_plain * sample_w[:, None, None]
+    if feat_w is not None:
+        loss_plain = loss_plain * feat_w[None, None, :]
+    return loss_plain.mean()
+
+
+def gaussian_kl(mu_p, cov_p, mu_q, cov_q):
+    """KL(P ‖ Q) between multivariate Gaussians; batched over leading dims. Returns nats."""
+    k       = mu_p.shape[-1]
+    cov_q_i = torch.linalg.inv(cov_q)
+    diff    = (mu_q - mu_p).unsqueeze(-1)
+    trace   = torch.diagonal(cov_q_i @ cov_p, dim1=-2, dim2=-1).sum(-1)
+    maha    = (diff.transpose(-2, -1) @ cov_q_i @ diff).squeeze(-1).squeeze(-1)
+    logdet  = torch.logdet(cov_q) - torch.logdet(cov_p)
+    return 0.5 * (trace + maha - k + logdet)
+
+
+def fit_gaussian(samples, eps=1.0):
+    """samples: (K, ..., d) → mean (..., d), covariance (..., d, d) with eps·I ridge."""
+    K      = samples.shape[0]
+    mu     = samples.mean(dim=0)
+    c      = samples - mu
+    cov    = torch.einsum("k...i,k...j->...ij", c, c) / (K - 1)
+    eye    = torch.eye(samples.shape[-1], device=samples.device, dtype=samples.dtype)
+    return mu, cov + eps * eye
+
+
+def validate(model, val_loader, device, feat_std, seed, max_batches=20):
+    """minFDE over 5 samples, in metres. Takes a plain model (student EMA or teacher)."""
+    model.eval()
+    torch.manual_seed(seed)
+    total_fde = 0.0
+    n_batches = 0
+
+    with torch.no_grad():
+        for batch in val_loader:
+            if n_batches >= max_batches:
+                break
+
+            obs   = batch["obs"].to(device)
+            fut   = batch["fut"].to(device)
+            t_rel = batch["t_rel"].to(device)
+
+            preds = euler_sample(model, obs, t_rel,
+                                  n_samples=5, n_steps=20, device=str(device))
+
+            feat_std_xy    = torch.tensor(feat_std[:2], device=device)
+            preds_xy       = preds[..., :2] * feat_std_xy
+            fut_xy         = fut[..., :2]   * feat_std_xy
+            fde_per_sample = torch.norm(
+                preds_xy[:, :, -1, :] - fut_xy[None, :, -1, :], dim=-1
+            )
+            min_fde    = fde_per_sample.min(dim=0).values.mean()
+            total_fde += min_fde.item()
+            n_batches += 1
+
+    return total_fde / n_batches
+
+
+def validate_losses(student, teacher, val_loader, device, alpha, gt_scale, kd_scale,
+                    seed, max_batches=20):
+    """
+    Distillation losses on validation batches with fixed flow times / noise.
+    The total uses the training normalizers' current scales; the _gt / _kd
+    terms are returned raw, so they stay comparable across epochs.
+    """
+    student.eval()
+    torch.manual_seed(seed)
+    tot = tot_gt = tot_kd = 0.0
+    n_batches = 0
+
+    with torch.no_grad():
+        for batch in val_loader:
+            if n_batches >= max_batches:
+                break
+
+            obs   = batch["obs"].to(device)
+            fut   = batch["fut"].to(device)
+            t_rel = batch["t_rel"].to(device)
+
+            t                 = sample_flow_time(obs.shape[0], device=str(device))
+            x_t, noise, v_tgt = forward_cfm(fut, t)
+            v_pred            = student(obs, x_t, t, t_rel)
+            v_teacher         = teacher(obs, x_t, t, t_rel)
+
+            loss_gt = weighted_mse(v_pred, v_tgt).item()
+            loss_kd = weighted_mse(v_pred, v_teacher).item()
+            tot    += alpha * loss_gt / gt_scale + (1 - alpha) * loss_kd / kd_scale
+            tot_gt += loss_gt
+            tot_kd += loss_kd
+            n_batches += 1
+
+    return tot / n_batches, tot_gt / n_batches, tot_kd / n_batches
+
+
+def validate_kl(student, teacher, val_loader, device, feat_std, seed,
+                n_samples=20, max_batches=5):
+    """
+    KL(teacher ‖ student) between the distributions of sampled future positions.
+
+    For each val window, draw n_samples futures from each model (same starting
+    noise for both, so the comparison is paired), fit a 2-D Gaussian to the
+    (x, y) positions in metres at every future step, and compute the closed-form
+    Gaussian KL. Returns (KL at the final step, KL averaged over all steps),
+    each averaged over windows.
+    """
+    student.eval()
+    feat_std_xy = torch.tensor(feat_std[:2], device=device, dtype=torch.float32)
+    kl_end_sum  = kl_path_sum = 0.0
+    n_windows   = 0
+
+    with torch.no_grad():
+        for b, batch in enumerate(val_loader):
+            if b >= max_batches:
+                break
+
+            obs   = batch["obs"].to(device)
+            t_rel = batch["t_rel"].to(device)
+
+            torch.manual_seed(seed + b)
+            s_xy = euler_sample(student, obs, t_rel, n_samples=n_samples,
+                                n_steps=20, device=str(device))[..., :2] * feat_std_xy
+            torch.manual_seed(seed + b)
+            t_xy = euler_sample(teacher, obs, t_rel, n_samples=n_samples,
+                                n_steps=20, device=str(device))[..., :2] * feat_std_xy
+            # (K, B, 43, 2) in metres; mean offset cancels in the KL, scale matters
+
+            mu_t, cov_t = fit_gaussian(t_xy.double())
+            mu_s, cov_s = fit_gaussian(s_xy.double())
+            kl = gaussian_kl(mu_t, cov_t, mu_s, cov_s)    # (B, 43)
+
+            kl_end_sum  += kl[:, -1].sum().item()
+            kl_path_sum += kl.mean(dim=1).sum().item()
+            n_windows   += kl.shape[0]
+
+    return kl_end_sum / n_windows, kl_path_sum / n_windows
+
+
+def load_teacher(teacher_cfg, teacher_ckpt, device):
+    teacher = build_model(teacher_cfg)
+    # load on the CPU: the checkpoint's optimizer state never touches the GPU
+    ckpt    = torch.load(teacher_ckpt, map_location="cpu", weights_only=False)
+    teacher.load_state_dict(model_weights(ckpt))   # this repo's or a CITRIS checkpoint
+    teacher = teacher.to(device)
+    teacher.eval()                      # disables dropout
+    teacher.requires_grad_(False)       # frozen
+    teacher = maybe_amp(teacher, teacher_cfg)      # fp16 autocast on CUDA if the config says amp
+    val = ckpt.get("val_fde", ckpt.get("val_fde_m"))
+    epoch = ckpt.get("epoch")
+    del ckpt
+    return teacher, epoch, val
+
+
+def append_metrics(path, row):
+    new_file = not path.exists()
+    with open(path, "a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=METRIC_FIELDS)
+        if new_file:
+            writer.writeheader()
+        writer.writerow({k: row.get(k, "") for k in METRIC_FIELDS})
+
+
+def train(
+    nc_path,
+    teacher_config,
+    student_config,
+    teacher_ckpt   = None,
+    output_dir     = str(CHECKPOINT_DIR / "swi_dit_distill"),
+    epochs         = 100,
+    batch_size     = 64,
+    lr             = 1e-4,
+    weight_decay   = 0.01,
+    grad_clip      = 1.0,
+    warmup_steps   = 1000,
+    alpha          = 0.7,
+    turn_weight    = 0.0,
+    turn_mode      = "continuous",
+    turn_threshold = 45.0,
+    z_weight       = 1.0,
+    time_weighting = "step",
+    seed           = 42,
+    split_seed     = 42,
+    kl_samples     = 20,
+    kl_batches     = 5,
+    log_every      = 500,
+    num_workers    = None,
+    device         = "cuda",
+    subset         = None,
+):
+    rank, local_rank, world_size = setup_distributed()
+    is_main = rank == 0
+    log     = print if is_main else (lambda *a, **k: None)   # only rank 0 prints
+    if batch_size % world_size:
+        raise ValueError(f"--batch_size {batch_size} must divide evenly over {world_size} GPUs")
+    set_seed(seed)
+
+    teacher_cfg  = load_config(teacher_config)
+    student_cfg  = load_config(student_config)
+    if not (teacher_ckpt or teacher_cfg.get("checkpoint")):
+        raise ValueError(f"{teacher_config}: no 'checkpoint' in the teacher config and no --teacher_ckpt given")
+    teacher_ckpt = resolve_path(teacher_ckpt or teacher_cfg["checkpoint"])
+
+    output_dir = Path(output_dir)
+    if is_main:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        for name, cfg in (("teacher_config.json", teacher_cfg), ("student_config.json", student_cfg)):
+            with open(output_dir / name, "w") as f:
+                json.dump(cfg, f, indent=2)
+    metrics_path = output_dir / "metrics.csv"
+
+    if world_size > 1 and torch.cuda.is_available():
+        device = torch.device("cuda", local_rank)
+    else:
+        device = torch.device(device if torch.cuda.is_available() else "cpu")
+    log(f"Training on {device} x {world_size} GPU(s) — CFM + SWI_DiT distillation "
+        f"({teacher_cfg.get('name', 'teacher')} → {student_cfg.get('name', 'student')}, "
+        f"alpha={alpha}, turn_weight={turn_weight} ({turn_mode}), z_weight={z_weight}, "
+        f"time_weighting={time_weighting}, seed={seed}, split_seed={split_seed})")
+
+    # split_seed controls the aircraft-level train/val/test split
+    # default: one DataLoader worker per CPU Slurm gave the job (falls back to 4 off-cluster)
+    # (with N GPUs the job's CPUs are shared: each process gets CPUs / N workers)
+    if num_workers is None:
+        num_workers = max(1, int(os.environ.get("SLURM_CPUS_PER_TASK", 4)) // world_size)
+    train_loader, val_loader, test_loader = get_dataloaders(
+        nc_path, batch_size=batch_size, seed=split_seed, subset=subset, num_workers=num_workers,
+    )
+    train_sampler = None
+    if world_size > 1:
+        # each GPU gets a different 1/N of the shuffled training set, batch_size / N per step
+        train_sampler = DistributedSampler(train_loader.dataset, num_replicas=world_size,
+                                           rank=rank, shuffle=True, seed=seed)
+        train_loader  = DataLoader(train_loader.dataset, batch_size=batch_size // world_size,
+                                   sampler=train_sampler, num_workers=num_workers, pin_memory=True)
+    log(f"Batches per epoch: {len(train_loader):,} train, {len(val_loader):,} val "
+        f"(batch_size={batch_size} total, {batch_size // world_size} per GPU, "
+        f"num_workers={num_workers} per GPU)", flush=True)
+
+    import netCDF4 as nc
+    ds       = nc.Dataset(nc_path, "r")
+    feat_std = np.array(ds.feature_std)
+    ds.close()
+    feat_mean_t, feat_std_t = feature_stats(train_loader, device)   # for turn weights
+    feat_w = feature_weights(z_weight, device=device)                 # None unless z_weight != 1
+
+    # ── Teacher (frozen) ──────────────────────────────────────────────────
+    teacher, teacher_epoch, teacher_ckpt_fde = load_teacher(teacher_cfg, teacher_ckpt, device)
+    log(f"Teacher: {teacher_ckpt} (epoch={teacher_epoch}, ckpt val_fde={teacher_ckpt_fde}"
+        f"{', fp16 autocast' if teacher_cfg.get('amp') and device.type == 'cuda' else ''}) "
+          f"| {teacher_cfg['model']} | {sum(p.numel() for p in teacher.parameters()):,} params")
+
+    # ── Student ───────────────────────────────────────────────────────────
+    model = build_model(student_cfg).to(device)
+    ema   = EMA(model, decay=0.9999)
+    log(f"Student: {student_cfg.get('arch', 'swi_dit')} {student_cfg['model']} | {sum(p.numel() for p in model.parameters()):,} params")
+
+    optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    scheduler = CosineAnnealingLR(optimizer, T_max=epochs)
+
+    train_config = {
+        "teacher_ckpt": str(teacher_ckpt),
+        "alpha":        alpha,
+        "turn_weight":  turn_weight,
+        "turn_mode":    turn_mode,
+        "turn_threshold": turn_threshold,
+        "z_weight":     z_weight,
+        "time_weighting": time_weighting,
+        "seed":         seed,
+        "split_seed":   split_seed,
+        "subset":       subset,
+        "batch_size":   batch_size,
+        "lr":           lr,
+        "epochs":       epochs,
+        "world_size":   world_size,
+    }
+
+    norm_gt     = LossNormalizer()
+    norm_kd     = LossNormalizer()
+
+    start_epoch = 0
+    best_fde    = float("inf")
+    global_step = 0
+    last_ckpt   = output_dir / "last.pt"
+    if last_ckpt.exists():
+        log(f"Resuming from {last_ckpt}...")
+        ckpt = torch.load(last_ckpt, map_location=device, weights_only=False)
+        model.load_state_dict(ckpt["model_state"])
+        ema.shadow.load_state_dict(ckpt["ema_state"])
+        optimizer.load_state_dict(ckpt["optimizer_state"])
+        if "scheduler_state" in ckpt:
+            scheduler.load_state_dict(ckpt["scheduler_state"])
+        best_fde    = ckpt.get("best_fde", best_fde)
+        norm_gt.scale = ckpt.get("loss_scale_gt")
+        norm_kd.scale = ckpt.get("loss_scale_kd")
+        global_step = ckpt.get("global_step", global_step)
+        start_epoch = ckpt["epoch"] + 1
+        log(f"Resumed at epoch {start_epoch}")
+
+    # DDP wraps the student for training only; `model` stays the plain module, used for
+    # EMA, checkpoints and grad clipping (its grads are the averaged DDP grads)
+    if world_size > 1:
+        # find_unused_parameters: TrajectoryDiT has a top-level adaLN that forward() never
+        # uses (each block has its own); kept so existing checkpoints still load
+        train_model = DDP(model, device_ids=[local_rank] if device.type == "cuda" else None,
+                          find_unused_parameters=True)
+    else:
+        train_model = model
+
+    # Teacher reference on the same val batches the student is scored on
+    teacher_fde = None
+    if is_main:
+        teacher_fde = validate(teacher, val_loader, device, feat_std, seed, max_batches=20)
+        log(f"Teacher val minFDE (this split): {teacher_fde:.1f}m", flush=True)
+    barrier(world_size, local_rank)
+
+    for epoch in range(start_epoch, epochs):
+        # same batch order / noise per epoch, even after resume; each GPU draws its own
+        # noise (rank 0 = the 1-GPU sequence)
+        torch.manual_seed(seed + epoch + 100003 * rank)
+        if train_sampler is not None:
+            train_sampler.set_epoch(epoch)
+
+        epoch_start = time.time()
+        epoch_lr    = optimizer.param_groups[0]["lr"]
+        model.train()
+        total_loss = total_gt = total_kd = 0.0
+        n_batches  = 0
+
+        for batch in train_loader:
+            obs   = batch["obs"].to(device)
+            fut   = batch["fut"].to(device)
+            t_rel = batch["t_rel"].to(device)
+
+            t                 = sample_flow_time(obs.shape[0], device=str(device))
+            x_t, noise, v_tgt = forward_cfm(fut, t)
+            v_pred            = train_model(obs, x_t, t, t_rel)
+
+            with torch.no_grad():
+                v_teacher = teacher(obs, x_t, t, t_rel)
+
+            sample_w = turn_weights(obs, fut, feat_mean_t, feat_std_t, turn_weight,
+                                    mode=turn_mode, threshold_deg=turn_threshold)
+            loss_gt  = weighted_mse(v_pred, v_tgt, sample_w, time_weighting, feat_w)
+            loss_kd  = weighted_mse(v_pred, v_teacher, sample_w, time_weighting, feat_w)
+
+            # Normalize each term by its running size, then weight. With several GPUs
+            # the running sizes come from the all-GPU mean, so every GPU uses the same
+            # scales (and so the same loss) — the logged values are the all-GPU mean too.
+            loss_vals = torch.stack([loss_gt.detach(), loss_kd.detach()])
+            if world_size > 1:
+                dist.all_reduce(loss_vals)
+                loss_vals /= world_size
+            norm_gt.update(loss_vals[0])
+            norm_kd.update(loss_vals[1])
+            loss    = alpha * norm_gt(loss_gt) + (1 - alpha) * norm_kd(loss_kd)
+
+            optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+            optimizer.step()
+
+            if global_step < warmup_steps:
+                lr_scale = (global_step + 1) / warmup_steps
+                for pg in optimizer.param_groups:
+                    pg["lr"] = lr * lr_scale
+
+            ema.update(model)
+            total_loss  += (alpha * loss_vals[0] / (norm_gt.scale + norm_gt.eps)
+                            + (1 - alpha) * loss_vals[1] / (norm_kd.scale + norm_kd.eps)).item()
+            total_gt    += loss_vals[0].item()
+            total_kd    += loss_vals[1].item()
+            n_batches   += 1
+            global_step += 1
+
+            # ── Within-epoch progress line ────────────────────────────────
+            if log_every and n_batches % log_every == 0:
+                elapsed = time.time() - epoch_start
+                rate    = n_batches / elapsed
+                eta     = (len(train_loader) - n_batches) / rate
+                log(f"  epoch {epoch+1:03d} | batch {n_batches:,}/{len(train_loader):,} "
+                      f"({100 * n_batches / len(train_loader):.1f}%) | "
+                      f"loss {total_loss / n_batches:.4f} (gt {total_gt / n_batches:.4f}, "
+                      f"kd {total_kd / n_batches:.4f}) | {rate:.1f} it/s | "
+                      f"elapsed {elapsed / 60:.1f} min | epoch ETA {eta / 60:.1f} min",
+                      flush=True)
+
+        scheduler.step()
+
+        # ── Per-epoch metrics, checkpoints: rank 0 only; the others wait ─
+        if not is_main:
+            barrier(world_size, local_rank)
+            continue
+
+        # ── Per-epoch student metrics (EMA weights) ───────────────────────
+        val_loss, val_gt, val_kd = validate_losses(
+            ema.shadow, teacher, val_loader, device, alpha,
+            norm_gt.scale, norm_kd.scale, seed, max_batches=20,
+        )
+        kl_end, kl_path = validate_kl(
+            ema.shadow, teacher, val_loader, device, feat_std, seed,
+            n_samples=kl_samples, max_batches=kl_batches,
+        )
+        rough_fde = validate(ema.shadow, val_loader, device, feat_std, seed, max_batches=5)
+
+        metrics = {
+            "epoch":            epoch + 1,
+            "lr":               f"{epoch_lr:.3e}",
+            "train_loss":       f"{total_loss / n_batches:.6f}",
+            "train_loss_gt":    f"{total_gt / n_batches:.6f}",
+            "train_loss_kd":    f"{total_kd / n_batches:.6f}",
+            "val_loss":         f"{val_loss:.6f}",
+            "val_loss_gt":      f"{val_gt:.6f}",
+            "val_loss_kd":      f"{val_kd:.6f}",
+            "val_kl_endpoint":  f"{kl_end:.4f}",
+            "val_kl_path":      f"{kl_path:.4f}",
+            "val_minfde_rough": f"{rough_fde:.1f}",
+            "loss_scale_gt":    f"{norm_gt.scale:.6f}",
+            "loss_scale_kd":    f"{norm_kd.scale:.6f}",
+        }
+
+        checkpoint = {
+            "epoch":           epoch,
+            "model_state":     model.state_dict(),
+            "ema_state":       ema.shadow.state_dict(),
+            "optimizer_state": optimizer.state_dict(),
+            "scheduler_state": scheduler.state_dict(),
+            "global_step":     global_step,
+            "loss_scale_gt":   norm_gt.scale,
+            "loss_scale_kd":   norm_kd.scale,
+            "best_fde":        best_fde,
+            "teacher_val_fde": teacher_fde,
+            "teacher_config":  teacher_cfg,
+            "student_config":  student_cfg,
+            "train_config":    train_config,
+            "metrics":         metrics,
+            "val_fde":         None,
+        }
+
+        # ── Every 5 epochs: proper FDE (20 batches ~1280 samples) ─────────
+        fde_str = f"rough FDE {rough_fde:.1f}m"
+        if (epoch + 1) % 5 == 0:
+            proper_fde = validate(ema.shadow, val_loader, device, feat_std, seed, max_batches=20)
+            metrics["val_minfde"] = f"{proper_fde:.1f}"
+            fde_str += f" | proper FDE {proper_fde:.1f}m (teacher {teacher_fde:.1f}m)"
+
+            checkpoint["val_fde"] = proper_fde
+            if proper_fde < best_fde:
+                best_fde = proper_fde
+                checkpoint["best_fde"] = best_fde
+                torch.save(checkpoint, output_dir / "best.pt")
+                fde_str += "  ✓ best"
+
+        metrics["epoch_time_s"] = f"{time.time() - epoch_start:.1f}"
+        append_metrics(metrics_path, metrics)
+        torch.save(checkpoint, output_dir / "last.pt")
+
+        log(f"Epoch {epoch+1:03d} | "
+            f"train {metrics['train_loss']} (gt {metrics['train_loss_gt']}, kd {metrics['train_loss_kd']}) | "
+            f"val {metrics['val_loss']} (gt {metrics['val_loss_gt']}, kd {metrics['val_loss_kd']}) | "
+            f"KL end {metrics['val_kl_endpoint']} path {metrics['val_kl_path']} | {fde_str}",
+            flush=True)
+        barrier(world_size, local_rank)
+
+    if world_size > 1:
+        dist.destroy_process_group()
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--nc_path", type=str, required=True,
+                         help="Path to the .nc trajectory dataset")
+    parser.add_argument("--teacher_config", type=str, required=True,
+                         help="JSON config for the teacher (model kwargs + checkpoint), "
+                              "e.g. configs/teacher_dit_cfm_20M.json")
+    parser.add_argument("--student_config", type=str, required=True,
+                         help="JSON config for the student (model kwargs), "
+                              "e.g. configs/students/swi_dit_4L_256.json")
+    parser.add_argument("--teacher_ckpt", type=str, default=None,
+                         help="Override the checkpoint path given in the teacher config")
+    parser.add_argument("--output_dir", type=str, default=str(CHECKPOINT_DIR / "swi_dit_distill"))
+    parser.add_argument("--epochs", type=int, default=100)
+    parser.add_argument("--batch_size", type=int, default=64)
+    parser.add_argument("--alpha", type=float, default=0.7,
+                         help="Weight on the normalized ground-truth CFM loss; (1 - alpha) goes to "
+                              "the normalized teacher-matching loss")
+    parser.add_argument("--turn_weight", type=float, default=0.0,
+                         help="Extra loss weight S for turning windows (0 = off); see --turn_mode")
+    parser.add_argument("--turn_mode", choices=TURN_MODES, default="continuous",
+                         help="continuous: weight 1 + S*min(turn/90deg, 1); "
+                              "step: 1 + S for windows turning >= --turn_threshold, else 1")
+    parser.add_argument("--turn_threshold", type=float, default=45.0,
+                         help="Degrees of turn that count as turning for --turn_mode step")
+    parser.add_argument("--z_weight", type=float, default=1.0,
+                         help="Loss weight of the altitude features (z, vz) relative to x, y, vx, vy "
+                              "(1 = off)")
+    parser.add_argument("--time_weighting", choices=TIME_WEIGHTINGS, default="step",
+                         help="Loss weight over the future horizon: 'step' = last quarter x2 "
+                              "(standard), 'linear' = continuous ramp from 1 to 2")
+    parser.add_argument("--seed", type=int, default=42,
+                         help="Seeds the training randomness (init, batch order, CFM noise)")
+    parser.add_argument("--split_seed", type=int, default=42,
+                         help="Seeds the aircraft-level train/val/test split; keep 42 so all runs "
+                              "and eval share one test set")
+    parser.add_argument("--kl_samples", type=int, default=20,
+                         help="Samples per window per model for the KL metric")
+    parser.add_argument("--log_every", type=int, default=500,
+                         help="Print a progress line every N training batches (0 = off)")
+    parser.add_argument("--num_workers", type=int, default=None,
+                         help="DataLoader workers; default = $SLURM_CPUS_PER_TASK, or 4")
+    parser.add_argument("--kl_batches", type=int, default=5,
+                         help="Validation batches used for the KL metric")
+    parser.add_argument("--subset", type=int, default=None,
+                         help="Limit to N samples; omit for the full dataset")
+    args = parser.parse_args()
+
+    train(
+        nc_path        = args.nc_path,
+        teacher_config = args.teacher_config,
+        student_config = args.student_config,
+        teacher_ckpt   = args.teacher_ckpt,
+        output_dir     = args.output_dir,
+        epochs         = args.epochs,
+        batch_size     = args.batch_size,
+        alpha          = args.alpha,
+        turn_weight    = args.turn_weight,
+        turn_mode      = args.turn_mode,
+        turn_threshold = args.turn_threshold,
+        z_weight       = args.z_weight,
+        time_weighting = args.time_weighting,
+        seed           = args.seed,
+        split_seed     = args.split_seed,
+        kl_samples     = args.kl_samples,
+        kl_batches     = args.kl_batches,
+        log_every      = args.log_every,
+        num_workers    = args.num_workers,
+        subset         = args.subset,
+    )

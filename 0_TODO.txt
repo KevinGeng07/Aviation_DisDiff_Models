@@ -1,5 +1,0 @@
-Consistency vs. Progressive Distillation, RoPE vs. RoPE-TS embeddings, 
-
-PLOT: mean loss by dimension "X' vs. "Y" vs. "Z".
-
-Z-valued loss function. 

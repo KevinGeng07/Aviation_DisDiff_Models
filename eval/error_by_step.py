@@ -2,12 +2,12 @@
 Per-axis error over the 43-step forecast horizon, with outliers trimmed to p1–p99.
 
 Usage (from the repo root):
-    python eval/error_by_step.py                                   # finished_ckpt/SWi_DiT/distill_6_4_256
-    python eval/error_by_step.py finished_ckpt/SWi_DiT/gru1_2L_256 --max_batches 20
+    python eval/error_by_step.py                                   # finished_ckpt/2_architecture/distill_4_256
+    python eval/error_by_step.py finished_ckpt/3_gru/gru1_2L_256 --max_batches 20
     python eval/error_by_step.py --plots_only                       # re-plot from saved stats.csv
 On Savio:
-    SCRIPT=error_by_step sbatch savio_batchfiles/EvalSavio.sh
-    SCRIPT=error_by_step EVAL_ARGS="--pick random" sbatch savio_batchfiles/EvalSavio.sh <run folder>
+    SCRIPT=error_by_step sbatch savio/job_eval.sh
+    SCRIPT=error_by_step EVAL_ARGS="--pick random" sbatch savio/job_eval.sh <run folder>
 
 For every test window the model samples K futures (--n_samples), and one of them is scored:
     --pick best    (default) the sample with the lowest ADE, i.e. the one minADE scores
@@ -54,7 +54,7 @@ SURFACE, TEXT, MUTED, GRID = "#fcfcfb", "#2b2b29", "#6b6a64", "#e6e5e0"
 
 # ── Computing the errors ──────────────────────────────────────────────────
 
-def collect_errors(model, test_loader, std, device, n_samples, n_steps, pick, max_batches, chunk):
+def collect_errors(model, test_loader, std, device, n_samples, n_steps, pick, max_batches, chunk, amp=False):
     """Signed error (pred - true) in metres of one sample per window: (N windows, 43, 3)."""
     std_xyz = torch.tensor(std[:3], device=device, dtype=torch.float32)
     chunks  = []
@@ -65,7 +65,7 @@ def collect_errors(model, test_loader, std, device, n_samples, n_steps, pick, ma
             obs   = batch["obs"].to(device)
             fut   = batch["fut"].to(device)
             t_rel = batch["t_rel"].to(device)
-            preds, chunk = sample(model, obs, t_rel, n_samples, n_steps, device, chunk)  # (K, B, 43, 6)
+            preds, chunk = sample(model, obs, t_rel, n_samples, n_steps, device, chunk, amp)  # (K, B, 43, 6)
 
             err = (preds[..., :3] - fut[None, ..., :3]) * std_xyz        # (K, B, 43, 3) metres
             if pick == "best":                                            # lowest ADE on (x, y)
@@ -180,8 +180,8 @@ def make_plots(rows, out_dir, label):
 
 def main():
     parser = argparse.ArgumentParser(description="Per-axis p1–p99 trimmed error over the forecast horizon")
-    parser.add_argument("folders", nargs="*", default=["finished_ckpt/SWi_DiT/distill_6_4_256"],
-                        help="run folders (default: finished_ckpt/SWi_DiT/distill_6_4_256)")
+    parser.add_argument("folders", nargs="*", default=["finished_ckpt/2_architecture/distill_4_256"],
+                        help="run folders (default: finished_ckpt/2_architecture/distill_4_256)")
     parser.add_argument("--nc_path", default=str(ROOT / "Data" / "trajectories_adsblol_seq86_stage2.nc"))
     parser.add_argument("--ckpt", default="best.pt", help="best.pt or last.pt")
     parser.add_argument("--n_samples", type=int, default=20, help="K futures sampled per window")
@@ -191,6 +191,8 @@ def main():
                         help="which of the K samples is scored per window")
     parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--chunk", type=int, default=256, help="trajectories per model call (see evaluate.py)")
+    parser.add_argument("--amp", action=argparse.BooleanOptionalAction, default=None,
+                        help="half-precision sampling; default from the model config (see evaluate.py)")
     parser.add_argument("--max_batches", type=int, default=None, help="limit for a quick check")
     parser.add_argument("--num_workers", type=int, default=2)
     parser.add_argument("--out_dir", default=str(ROOT / "results" / "error_by_step"))
@@ -219,7 +221,8 @@ def main():
             std = loaders[seed].dataset.stats["feature_std"]
             torch.manual_seed(0)      # same sampling noise as evaluate.py
             err = collect_errors(model, loaders[seed], std, device, args.n_samples,
-                                 ckpt_steps or args.n_steps, args.pick, args.max_batches, args.chunk)
+                                 ckpt_steps or args.n_steps, args.pick, args.max_batches, args.chunk,
+                                 model.default_amp if args.amp is None else args.amp)
             rows = step_stats(err)
             write_stats(rows, out_dir / "stats.csv")
             print(f"  {err.shape[0]:,} windows | saved {out_dir / 'stats.csv'}")

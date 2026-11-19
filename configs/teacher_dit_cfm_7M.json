@@ -1,0 +1,17 @@
+{
+  "name": "dit_cfm_7M",
+  "arch": "dit_cfm",
+  "comment": "CITRIS flow_v4 architecture (TrajectoryFlowV5). Put its best.pt at 'checkpoint' (a CITRIS checkpoint loads as is), or train it: bash savio/stage1_teacher.sh --retrain configs/teacher_dit_cfm_7M.json",
+  "checkpoint": "finished_ckpt/1_teacher/dit_cfm_7M/best.pt",
+  "model": {
+    "obs_len": 43,
+    "fut_len": 43,
+    "in_dim": 6,
+    "d_model": 256,
+    "n_heads": 8,
+    "n_layers": 6,
+    "dropout": 0.1,
+    "use_pos_emb": true,
+    "use_attn_mask": true
+  }
+}

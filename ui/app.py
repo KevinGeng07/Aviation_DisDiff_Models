@@ -194,7 +194,7 @@ def _build_model(arch: str, n_layers: int = 6) -> torch.nn.Module:
         from models.dit_RoPE_timestamps import TrajectoryDiT as RoPETSDiT
         return RoPETSDiT(d_model=256, n_heads=8, n_layers=6)
     if arch == "swi_dit":
-        from models.SWI_DiT import TrajectoryDiT as SwiDiT
+        from models.Swi_DiT import TrajectoryDiT as SwiDiT
         return SwiDiT(d_model=256, n_heads=8, n_layers=n_layers)
     raise ValueError(f"Unknown arch: {arch}")
 

@@ -1,0 +1,9 @@
+{
+  "file": "best.pt",
+  "size": 114125257,
+  "sha256": "c191bedd2652c894a0c07c477bc6d78bea62e09868a671c848016134d5c10f2d",
+  "parts": [
+    "best.pt.gz.part000",
+    "best.pt.gz.part001"
+  ]
+}

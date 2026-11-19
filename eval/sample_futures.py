@@ -3,7 +3,7 @@ Sample futures from every finished model for a few random test windows → one C
 
 Usage (from the repo root):
     python eval/sample_futures.py                                  # every model in finished_ckpt/
-    python eval/sample_futures.py finished_ckpt/SWi_DiT/6_4_256_SWiDiT     # or folders given on the command line
+    python eval/sample_futures.py finished_ckpt/2_architecture/distill_4_256   # or folders given
     python eval/sample_futures.py --n_traj 10 --n_samples 20 --out eval/futures.csv
 
 Picks --n_traj random test windows (the same ones for every model), samples
@@ -15,7 +15,7 @@ window = index of the window in the .nc file, future = 1..K (0 = the true future
 step = 1..43, x_m / y_m = metres east / north of SFO, z_m = altitude in metres,
 vx_ms / vy_ms / vz_ms = east / north / climb speed in m/s. Every model starts from the same
 sampling noise. Progressive-distillation students (checkpoints that store n_steps)
-are sampled with their own step count and labelled e.g. 6_4_256_Progressive_4step.
+are sampled with their own step count and labelled e.g. progressive_4_256_4step.
 """
 import argparse
 import csv

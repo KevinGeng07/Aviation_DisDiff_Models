@@ -2,12 +2,12 @@
 Benchmark the distilled SWI_DiT students side by side: accuracy, size and speed.
 
 Usage (on Savio, from the repo root):
-    SCRIPT=benchmark sbatch savio_batchfiles/EvalSavio.sh                      # every model in finished_ckpt/
-    SCRIPT=benchmark sbatch savio_batchfiles/EvalSavio.sh finished_ckpt/SWi_DiT/distill_6_4_256
-    SCRIPT=benchmark EVAL_ARGS="--max_batches 10 --out results/benchmark.json" sbatch savio_batchfiles/EvalSavio.sh
-    SCRIPT=benchmark EVAL_ARGS="--n_steps 20 16 8 4 2 1 --out results/benchmark_all.json" \
-        sbatch savio_batchfiles/EvalSavio.sh finished_ckpt/SWi_DiT/*
-        # every student at every step count + each progressive round, in one file
+    SCRIPT=benchmark sbatch savio/job_eval.sh                       # every model in finished_ckpt/
+    SCRIPT=benchmark sbatch savio/job_eval.sh finished_ckpt/2_architecture
+    SCRIPT=benchmark EVAL_ARGS="--max_batches 10 --out results/benchmark.json" sbatch savio/job_eval.sh
+    SCRIPT=benchmark EVAL_ARGS="--n_steps 16 8 4 2 1 --out results/stage5.json" \
+        sbatch savio/job_eval.sh finished_ckpt/5_stepwise
+        # consistency models at every step count + each progressive round, in one file
 
 For every model:
     minADE, minFDE, avgADE, avgFDE   test-set errors in metres, exactly as eval/evaluate.py
@@ -75,6 +75,8 @@ def main():
     parser.add_argument("--n_runs", type=int, default=1000, help="timed single-sample runs for latency")
     parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--max_batches", type=int, default=None, help="limit ADE/FDE batches for a quick check")
+    parser.add_argument("--amp", action=argparse.BooleanOptionalAction, default=None,
+                        help="half-precision sampling for ADE/FDE; default from the model config (see evaluate.py)")
     parser.add_argument("--chunk", type=int, default=256,
                         help="trajectories per model call while sampling for ADE/FDE (see evaluate.py)")
     parser.add_argument("--num_workers", type=int, default=2)
@@ -113,7 +115,8 @@ def main():
 
             torch.manual_seed(0)   # same sampling noise for every model → comparable numbers
             metrics, n, _ = evaluate(model, test_loaders[seed], feat_mean, feat_std, device,
-                                     args.n_samples, n_steps, args.max_batches, chunk=args.chunk)
+                                     args.n_samples, n_steps, args.max_batches, chunk=args.chunk,
+                                     amp=model.default_amp if args.amp is None else args.amp)
             results = {"steps": n_steps}
             results.update({k: metrics[k] for k in ("minADE", "minFDE", "avgADE", "avgFDE")})
             results["params"] = sum(p.numel() for p in model.parameters())
