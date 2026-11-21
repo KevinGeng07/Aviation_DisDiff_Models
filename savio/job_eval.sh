@@ -5,6 +5,7 @@
 #   SCRIPT=benchmark       ADE/FDE + params + latency            → table in logs/eval_<jobid>.out
 #   SCRIPT=sample_futures  sampled futures for 10 windows        → eval/futures.csv
 #   SCRIPT=error_by_step   per-axis error over the horizon + plots → results/error_by_step/
+#   SCRIPT=latency         per-window sampling latency, 10,000 windows → results/eval/eval_latency.json
 #
 # Usage (on Savio, from the repo root — the job runs in the folder you submit from):
 #   sbatch savio/job_eval.sh                                  # every model in finished_ckpt/
