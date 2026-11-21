@@ -1,0 +1,107 @@
+{
+  "settings": {
+    "ckpt": "best.pt",
+    "n_samples": 20,
+    "n_steps": 20,
+    "max_batches": null,
+    "turn_deg": 45.0,
+    "nc_path": "/global/scratch/users/kevingeng/aviation-bayen/data/trajectories_adsblol_seq86_stage2.nc"
+  },
+  "n_windows": 63016,
+  "n_turning": 15023,
+  "results_m": {
+    "distill_2_128": {
+      "minADE": 384.40909203614956,
+      "minFDE": 697.2746798990038,
+      "avgADE": 1323.8139647817618,
+      "avgFDE": 3216.530707479053,
+      "minFDE_turn": 1624.7243366974026,
+      "avgFDE_turn": 6178.777631459887,
+      "minADE_p1": 44.263845443725586,
+      "minADE_p99": 2888.804174804681,
+      "minFDE_p1": 17.159338760375977,
+      "minFDE_p99": 6121.124609374998
+    },
+    "distill_2_256": {
+      "minADE": 339.7710441501216,
+      "minFDE": 628.7912702571322,
+      "avgADE": 1143.7862781748881,
+      "avgFDE": 2785.794768082213,
+      "minFDE_turn": 1471.8876909246967,
+      "avgFDE_turn": 5548.204346044398,
+      "minADE_p1": 31.79729242324829,
+      "minADE_p99": 2744.2474853515614,
+      "minFDE_p1": 12.679650592803954,
+      "minFDE_p99": 5862.070019531232
+    },
+    "distill_2_384": {
+      "minADE": 325.29891078629834,
+      "minFDE": 605.2674262848424,
+      "avgADE": 1087.296864276037,
+      "avgFDE": 2648.301994731497,
+      "minFDE_turn": 1421.9926269466246,
+      "avgFDE_turn": 5331.1002784012435,
+      "minADE_p1": 27.329857444763185,
+      "minADE_p99": 2718.0459472656235,
+      "minFDE_p1": 11.548775339126587,
+      "minFDE_p99": 5872.897265624996
+    },
+    "distill_4_128": {
+      "minADE": 319.7254894993186,
+      "minFDE": 591.844177455304,
+      "avgADE": 1112.3226939016479,
+      "avgFDE": 2708.785985280524,
+      "minFDE_turn": 1371.9375965641746,
+      "avgFDE_turn": 5320.87148351694,
+      "minADE_p1": 30.258287811279295,
+      "minADE_p99": 2568.645532226562,
+      "minFDE_p1": 11.811834716796875,
+      "minFDE_p99": 5458.12587890625
+    },
+    "distill_4_256": {
+      "minADE": 300.4692825098487,
+      "minFDE": 565.229113997338,
+      "avgADE": 1023.4721020132783,
+      "avgFDE": 2492.955397116407,
+      "minFDE_turn": 1316.6780416024856,
+      "avgFDE_turn": 4994.97569039972,
+      "minADE_p1": 23.99063711166382,
+      "minADE_p99": 2514.2457275390607,
+      "minFDE_p1": 9.927519989013671,
+      "minFDE_p99": 5405.638427734372
+    },
+    "distill_4_384": {
+      "minADE": 295.36034375198363,
+      "minFDE": 555.8778652507399,
+      "avgADE": 972.6958162783063,
+      "avgFDE": 2361.546925334439,
+      "minFDE_turn": 1293.810232870796,
+      "avgFDE_turn": 4807.468180690649,
+      "minADE_p1": 22.201238536834715,
+      "minADE_p99": 2547.0335571289056,
+      "minFDE_p1": 9.42629508972168,
+      "minFDE_p99": 5622.979370117181
+    },
+    "distill_6_128": {
+      "minADE": 305.54630190336087,
+      "minFDE": 569.2688052129122,
+      "avgADE": 1042.1726504107091,
+      "avgFDE": 2534.110629889631,
+      "minFDE_turn": 1330.2622542732654,
+      "avgFDE_turn": 5033.342479552187,
+      "minADE_p1": 27.000305938720704,
+      "minADE_p99": 2539.7432128906244,
+      "minFDE_p1": 10.443123912811279,
+      "minFDE_p99": 5522.487890624998
+    }
+  },
+  "folders": {
+    "distill_2_128": "finished_ckpt/2_architecture/distill_2_128/model",
+    "distill_2_256": "finished_ckpt/2_architecture/distill_2_256/model",
+    "distill_2_384": "finished_ckpt/2_architecture/distill_2_384/model",
+    "distill_4_128": "finished_ckpt/2_architecture/distill_4_128/model",
+    "distill_4_256": "finished_ckpt/2_architecture/distill_4_256/model",
+    "distill_4_384": "finished_ckpt/2_architecture/distill_4_384/model",
+    "distill_6_128": "finished_ckpt/2_architecture/distill_6_128/model"
+  }
+}

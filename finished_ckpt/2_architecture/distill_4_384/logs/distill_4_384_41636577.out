@@ -1,0 +1,10 @@
+Python: /global/home/users/kevingeng/.conda/envs/adsb/bin/python
+torch 2.14.1+cu130 | netCDF4 1.7.4
+CUDA available: True
+Device: NVIDIA GeForce RTX 2080 Ti
+Run: distill_4_384 | student: /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/configs/students/swi_dit_4L_384.json | gpus=1 | alpha=0.7 | epochs=100 | batch=256 | seed=42 | split_seed=42
+Loss weighting: turn_weight=0 (continuous, threshold 45°) | z_weight=1 | time_weighting=step
+Teacher: /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/configs/teacher_dit_cfm_20M.json → /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/1_teacher/dit_cfm_20M/best.pt
+Output: /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/2_architecture/distill_4_384/model
+ERROR: /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/2_architecture/distill_4_384/model was updated in the last 90 min but has no lock — it may belong to an active run.
+       Submit with a different RUN_NAME, or add ALLOW_RECENT=1 if you are sure it's not running.
