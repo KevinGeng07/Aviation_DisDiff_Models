@@ -1,0 +1,55 @@
+1. On your Mac, compress the teacher checkpoints and push everything. Compressing lets the teachers go through git:
+cd ~/Aviation_DisDiff_Models
+python finished_ckpt/compress_ckpts.py 1_teacher
+git add -A configs models training eval savio finished_ckpt README.md .gitignore
+git commit -m "stage 2 setup: CITRIS DiT teacher, distill_<L>_<d> runs"
+git push
+
+2. On Savio, pull, restore the teacher, check it, and submit:
+cd /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models
+git pull
+python finished_ckpt/decompress_ckpts.py 1_teacher   # training needs the plain best.pt
+bash savio/stage1_teacher.sh                          # should print "Teacher OK: ... (331 MB)"
+bash savio/stage2_architectures.sh                    # submits the 7 runs
+squeue -u $USER
+Use SBATCH_ACCOUNT=fc_mixedav bash savio/stage2_architectures.sh to charge your other account.
+
+3. Watch the runs:
+tail -f finished_ckpt/2_architecture/distill_4_256/logs/*.out          # one run live
+for d in finished_ckpt/2_architecture/*/model; do                       # epochs done per run
+echo "$(basename $(dirname $d)): $(tail -1 $d/metrics.csv 2>/dev/null | cut -d, -f1) / 100"; done
+
+Resuming once the jobs have stopped
+
+Each run saves model/last.pt at the end of every epoch. A resumed job continues from there, so at most one partial epoch is lost.
+
+When all the jobs have left the queue, whether they finished, hit the time limit or failed, resubmit only the runs that haven't reached 100
+epochs:
+cd /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models
+for d in finished_ckpt/2_architecture/distill_*; do
+name=$(basename $d)
+done_ep=$(tail -1 $d/model/metrics.csv 2>/dev/null | cut -d, -f1)
+if [ "${done_ep:-0}" -lt 100 ] && ! squeue -h -u $USER -n $name | grep -q .; then
+    L=$(echo $name | cut -d_ -f2); W=$(echo $name | cut -d_ -f3)
+    bash savio/submit_distill_run.sh --name $name --student configs/students/swi_dit_${L}L_${W}.json \
+        --save_dir $d --resume
+fi
+done
+What this does for each run:
+- Finished (100 epochs): skipped, so it doesn't sit in the queue just to exit.
+- Still queued or running: skipped.
+- Stopped early: resubmitted with --resume. It continues from its last.pt, writing to the same folder, with its new log in the same logs/
+folder.
+- No metrics.csv yet (failed before finishing an epoch): resubmitted, and it starts from scratch.
+
+Run the loop again after each round of jobs until every run shows 100/100. It's safe to repeat.
+
+To resume a single run:
+bash savio/submit_distill_run.sh --name distill_4_256 --student configs/students/swi_dit_4L_256.json \
+    --save_dir finished_ckpt/2_architecture/distill_4_256 --resume
+
+To train past 100 epochs: add --epochs 150 to the resume command. The learning-rate schedule was set for 100 epochs, so the extra epochs
+run at the schedule's final learning rate rather than restarting it.
+
+When all 7 are done, compare them:
+SCRIPT=benchmark EVAL_ARGS="--out results/stage2.json" sbatch savio/job_eval.sh finished_ckpt/2_architecture

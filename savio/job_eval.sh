@@ -15,6 +15,9 @@
 #   SCRIPT=benchmark sbatch savio/job_eval.sh                 # accuracy/size/speed table
 #   SCRIPT=sample_futures sbatch savio/job_eval.sh            # futures CSV for every model
 # Compressed checkpoints (best.pt.gz.part*) are read directly; no need to decompress first.
+# Logs: logs/<job name>_<job id>.out / .err in the repo root. evaluate results are saved after
+# every model to results/eval/<job name>.json (or EVAL_ARGS="--out ..."); a job cut off by its
+# time limit keeps the finished models, and the same sbatch command again resumes from there.
 # ---------------------------------------------------------------------------
 #SBATCH --job-name=eval
 #SBATCH --account=ac_mixedav
@@ -39,6 +42,11 @@ REPO=${REPO:-$SLURM_SUBMIT_DIR}   # override with REPO=/path/to/repo sbatch ...
 cd "$REPO"
 
 SCRIPT=${SCRIPT:-evaluate}
+# evaluate.py: always save, after every model, to results/eval/<job name>.json unless --out is
+# given; re-submitting with the same job name (or --out) resumes, skipping finished models
+if [ "$SCRIPT" = evaluate ] && [[ " $EVAL_ARGS " != *" --out "* ]]; then
+    EVAL_ARGS="$EVAL_ARGS --out results/eval/${SLURM_JOB_NAME:-eval}.json"
+fi
 echo "Script: eval/$SCRIPT.py | folders: ${*:-every model in finished_ckpt/} | extra args: ${EVAL_ARGS:-none}"
 # -u: unbuffered so results show up in the log as each model finishes
 $PYTHON -u eval/$SCRIPT.py "$@" --nc_path $NC_PATH --num_workers ${SLURM_CPUS_PER_TASK:-2} $EVAL_ARGS

@@ -83,9 +83,10 @@ if [ -f "$LOCK" ]; then
         echo "       Submit this run with a different RUN_NAME."
         exit 1
     fi
-elif [ "${ALLOW_RECENT:-0}" != 1 ] && \
+elif [ "${ALLOW_RECENT:-0}" != 1 ] && [ "${RESUME:-0}" != 1 ] && \
      [ -n "$(find "$OUTPUT_DIR" -maxdepth 1 \( -name last.pt -o -name metrics.csv \) -mmin -90 2>/dev/null)" ]; then
     # folder written by a job started before this lock existed (e.g. a run that is active right now)
+    # (skipped for --resume: submit_distill_run.sh already checked no job of this name is queued/running)
     echo "ERROR: $OUTPUT_DIR was updated in the last 90 min but has no lock — it may belong to an active run."
     echo "       Submit with a different RUN_NAME, or add ALLOW_RECENT=1 if you are sure it's not running."
     exit 1

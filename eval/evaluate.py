@@ -279,7 +279,9 @@ def main():
     parser.add_argument("--num_workers", type=int, default=2)
     parser.add_argument("--turn_deg", type=float, default=45.0,
                         help="windows turning at least this much count for the *_turn metrics")
-    parser.add_argument("--out", default=None, help="also save the results to this JSON file")
+    parser.add_argument("--out", default=None,
+                        help="also save the results to this JSON file, rewritten after every model; "
+                             "re-running with the same --out skips the models already in it (resume)")
     parser.add_argument("--device", default="auto", help="auto (CUDA, else MPS, else CPU), cuda, mps or cpu")
     parser.add_argument("--amp", action=argparse.BooleanOptionalAction, default=None,
                         help="sample in half precision: less memory, faster on GPU, slightly different "
@@ -301,9 +303,36 @@ def main():
     feat_std  = np.array(ds.feature_std)
     ds.close()
 
+    # --out is rewritten after every model, so a job cut off by its time limit keeps what it
+    # finished; running again with the same --out skips those models (same settings only)
+    settings = {k: getattr(args, k) for k in ("ckpt", "n_samples", "n_steps", "max_batches",
+                                              "turn_deg", "nc_path")}
+    all_results, done, n, n_turn = {}, {}, None, None
+    out = Path(args.out) if args.out else None
+    if out is not None and out.exists():
+        prev = json.loads(out.read_text())
+        if prev.get("settings") != settings:
+            sys.exit(f"{out} was made with other settings ({prev.get('settings')}); "
+                     f"use another --out, or delete it to start over")
+        all_results, done = prev["results_m"], prev.get("folders", {})
+        n, n_turn = prev.get("n_windows"), prev.get("n_turning")
+        print(f"Resuming {out}: {len(all_results)} model(s) already done")
+
+    def save():
+        payload = {"settings": settings, "n_windows": n, "n_turning": n_turn,
+                   "results_m": all_results, "folders": done}
+        out.parent.mkdir(parents=True, exist_ok=True)
+        tmp = out.with_name(out.name + ".tmp")
+        tmp.write_text(json.dumps(payload, indent=2))
+        tmp.replace(out)                       # never leaves a half-written file
+
     test_loaders = {}   # one per training seed; the seed decides the aircraft-level split
-    all_results = {}
     for folder in folders:
+        key = str(Path(folder).resolve().relative_to(ROOT)) if Path(folder).resolve().is_relative_to(ROOT) \
+              else str(Path(folder).resolve())
+        if key in done.values():
+            print(f"\n=== {folder} === already in {out}, skipping")
+            continue
         print(f"\n=== {folder} ===")
         model, seed, ckpt_steps = load_model(folder, args.ckpt, device)
         if seed not in test_loaders:
@@ -316,25 +345,27 @@ def main():
                                       args.n_samples, ckpt_steps or args.n_steps,
                                       args.max_batches, args.turn_deg, args.chunk,
                                       model.default_amp if args.amp is None else args.amp)
-        all_results[model_name(folder, ckpt_steps)] = results
-        for name, value in results.items():
-            print(f"  {name}: {value:8.1f} m")
+        name = model_name(folder, ckpt_steps)
+        all_results[name], done[name] = results, key
+        for metric, value in results.items():
+            print(f"  {metric}: {value:8.1f} m")
+        if out is not None:
+            save()
+            print(f"  saved to {out}")
+
+    if not all_results:
+        sys.exit("No models evaluated")
 
     # side-by-side summary
-    print(f"\nTest set: {n:,} windows ({n_turn:,} turning >= {args.turn_deg:g}°) | K={args.n_samples} samples | {args.n_steps} Euler steps (progressive: own) | metres")
+    print(f"\nTest set: {n or 0:,} windows ({n_turn or 0:,} turning >= {args.turn_deg:g}°) | K={args.n_samples} samples | {args.n_steps} Euler steps (progressive: own) | metres")
     names = list(next(iter(all_results.values())))
     width = max(len(k) for k in all_results) + 2
     print("model".ljust(width) + "".join(f"{m:>13}" for m in names))
     for run, results in all_results.items():
         print(run.ljust(width) + "".join(f"{results[m]:13.1f}" for m in names))
 
-    if args.out:
-        settings = {k: getattr(args, k) for k in ("ckpt", "n_samples", "n_steps", "max_batches",
-                                                  "turn_deg", "nc_path")}
-        payload = {"settings": settings, "n_windows": n, "n_turning": n_turn, "results_m": all_results}
-        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.out).write_text(json.dumps(payload, indent=2))
-        print(f"\nSaved results to {args.out}")
+    if out is not None:
+        print(f"\nSaved results to {out}")
 
 
 if __name__ == "__main__":
