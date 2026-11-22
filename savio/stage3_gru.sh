@@ -9,7 +9,7 @@
 #
 # Usage (on Savio):  bash savio/stage3_gru.sh
 #                    SEED=43 bash savio/stage3_gru.sh               # another seed → *_s43
-# Then compare:      SCRIPT=benchmark sbatch savio/job_eval.sh \
+# Then compare:      SCRIPT=full_eval sbatch savio/job_eval.sh \
 #                        finished_ckpt/2_architecture/distill_4_256 finished_ckpt/3_gru
 # ---------------------------------------------------------------------------
 cd "$(dirname "$0")/.."
