@@ -162,7 +162,9 @@ def load_model(folder, ckpt_name, device):
     # the split seed decides the test aircraft; older checkpoints only stored "seed" (= split then)
     train_config = ckpt.get("train_config", {})
     split_seed   = train_config.get("split_seed", train_config.get("seed", 42))
-    model.default_amp = bool(cfg.get("amp")) and device.type == "cuda"   # config "amp": CUDA only
+    # eval precision: fp32 unless the config sets "eval_amp" (CUDA only). The config's "amp" is
+    # for distillation only (fp16 teacher calls in training), so it does not affect eval.
+    model.default_amp = bool(cfg.get("eval_amp")) and device.type == "cuda"
     print(f"Checkpoint: {ckpt_path} (epoch {ckpt.get('epoch')})"
           f"{' | fp16 sampling by default (--no-amp to turn off)' if model.default_amp else ''}")
     print(f"Model: {cfg.get('arch', 'swi_dit')} {cfg['model']} | "
@@ -289,7 +291,7 @@ def main():
     parser.add_argument("--device", default="auto", help="auto (CUDA, else MPS, else CPU), cuda, mps or cpu")
     parser.add_argument("--amp", action=argparse.BooleanOptionalAction, default=None,
                         help="sample in half precision: less memory, faster on GPU, slightly different "
-                             "numbers. Default: on for models whose config says amp (on CUDA), else off")
+                             "numbers. Default: on for models whose config sets eval_amp (on CUDA), else off (fp32)")
     args = parser.parse_args()
 
     folders = [f if Path(f).is_absolute() or Path(f).exists() else ROOT / f

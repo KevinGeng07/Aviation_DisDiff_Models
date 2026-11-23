@@ -7,10 +7,10 @@ without it, it's the original SWI_DiT, so all existing configs and checkpoints s
 model_weights(ckpt) picks the weights to evaluate / distil from out of a checkpoint dict, in
 this repo's format (ema_state / model_state) or CITRIS's (ema_model / model).
 
-A config with "amp": true (e.g. configs/teacher_dit_cfm_20M.json) asks for that model to run in
-fp16 autocast on CUDA by default: maybe_amp() wraps it for frozen-teacher use, and eval/ samples
-it in half precision unless --no-amp is given. On CPU / MPS it runs in full precision (half
-precision is slower there).
+A config with "amp": true (e.g. configs/teacher_dit_cfm_20M.json) runs that model in fp16
+autocast on CUDA when it is the frozen teacher in distillation: maybe_amp() wraps it. Evaluation
+(eval/) ignores "amp" and samples in fp32, unless the config also sets "eval_amp": true or
+--amp is given. On CPU / MPS it runs in full precision (half precision is slower there).
 """
 import importlib
 

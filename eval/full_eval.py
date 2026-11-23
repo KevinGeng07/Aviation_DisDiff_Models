@@ -47,7 +47,7 @@ def main():
     p.add_argument("--n_steps", type=int, default=20, help="Euler steps (progressive students use their own)")
     p.add_argument("--device", default="auto", help="auto (CUDA, else MPS, else CPU), cuda, mps or cpu")
     p.add_argument("--amp", action=argparse.BooleanOptionalAction, default=None,
-                   help="fp16 autocast; default: on for models whose config says amp (on CUDA)")
+                   help="fp16 autocast; default: on for models whose config sets eval_amp (on CUDA), else fp32")
     p.add_argument("--num_workers", type=int, default=2)
     p.add_argument("--out", default=None, help="JSON file (resumable); default results/eval/full_eval_b<B>.json")
     # accuracy (evaluate.py)

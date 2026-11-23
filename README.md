@@ -122,9 +122,9 @@ count: pass `--n_steps` (or `benchmark.py --n_steps 1 2 4 8 16`).
 - 100 epochs of a 4-layer student take ~22 h on a GTX 2080 Ti; `submit_distill_run.sh`
   requests 24 h. A run cut off by the time limit continues with `--resume`.
 - `submit_distill_run.sh --gpus 2` trains one run on two GPUs (`--batch_size` stays the total).
-- The 20.7 M teacher runs in fp16 autocast on CUDA by default (`"amp": true` in its config):
-  during distillation its forward passes, and in eval its sampling (`--no-amp` turns it off).
-  On CPU / MPS it stays in full precision, where half precision is slower.
+- The 20.7 M teacher runs in fp16 autocast on CUDA during distillation (`"amp": true` in its
+  config). Evaluation samples every model in fp32 unless its config sets `"eval_amp": true` or
+  `--amp` is given. On CPU / MPS it stays in full precision, where half precision is slower.
 - The old SWI_DiT teacher checkpoint is a Git LFS file: without `git lfs pull` it is a 130-byte pointer and
   loading fails with `invalid load key, 'v'`.
 - `Swi_DiT.py` and the GRU files define a top-level `adaLN` that `forward()` never uses; it is

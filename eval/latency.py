@@ -22,7 +22,7 @@ real wall time. --n_warmup untimed calls come first (CUDA setup, kernel selectio
 
 Reported per model: per-call mean, std, min, p50, p90, p95, p99, max (milliseconds), per-window
 mean (ms_per_window = mean / batch_size), throughput (windows/s), params, steps and whether fp16
-autocast was used (default from the model config, like evaluate.py; --amp / --no-amp to force).
+autocast was used (default fp32, or the config's eval_amp, like evaluate.py; --amp / --no-amp to force).
 
 batch 1 measures responsiveness for one aircraft: it is dominated by per-layer launch overhead,
 so it grows with depth, not width. Bigger batches give the GPU real work, so they measure
@@ -132,7 +132,7 @@ def main():
     parser.add_argument("--n_warmup", type=int, default=50, help="untimed calls before timing")
     parser.add_argument("--device", default="auto", help="auto (CUDA, else MPS, else CPU), cuda, mps or cpu")
     parser.add_argument("--amp", action=argparse.BooleanOptionalAction, default=None,
-                        help="fp16 autocast; default: on for models whose config says amp (on CUDA)")
+                        help="fp16 autocast; default: on for models whose config sets eval_amp (on CUDA), else fp32")
     parser.add_argument("--num_workers", type=int, default=0, help="unused; accepted for savio/job_eval.sh")
     parser.add_argument("--out", default=None,
                         help="JSON file, rewritten after every model; existing entries are skipped (resume). "

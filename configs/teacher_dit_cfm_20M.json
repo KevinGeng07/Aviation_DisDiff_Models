@@ -1,7 +1,7 @@
 {
   "name": "dit_cfm_20M",
   "arch": "dit_cfm",
-  "comment": "CITRIS flow_v5 architecture (TrajectoryFlowV5). Put its best.pt at 'checkpoint' (a CITRIS checkpoint loads as is), or train it: bash savio/stage1_teacher.sh --retrain configs/teacher_dit_cfm_20M.json amp: run this model in fp16 autocast on CUDA by default (training-time teacher calls and eval sampling); eval --no-amp turns it off.",
+  "comment": "CITRIS flow_v5 architecture (TrajectoryFlowV5). Put its best.pt at 'checkpoint' (a CITRIS checkpoint loads as is), or train it: bash savio/stage1_teacher.sh --retrain configs/teacher_dit_cfm_20M.json amp: fp16 autocast on CUDA for the frozen-teacher calls in distillation only. Evaluation runs it in fp32 (add \"eval_amp\": true, or pass --amp, for fp16 eval).",
   "checkpoint": "finished_ckpt/1_teacher/dit_cfm_20M/best.pt",
   "amp": true,
   "model": {
