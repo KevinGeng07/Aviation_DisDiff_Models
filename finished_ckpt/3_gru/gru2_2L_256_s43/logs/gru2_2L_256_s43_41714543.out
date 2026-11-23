@@ -1,0 +1,39 @@
+Python: /global/home/users/kevingeng/.conda/envs/adsb/bin/python
+torch 2.14.1+cu130 | netCDF4 1.7.4
+CUDA available: True
+Device: NVIDIA GeForce RTX 2080 Ti
+Run: gru2_2L_256_s43 | student: /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/configs/students/gru2_2L_256.json | gpus=1 | alpha=0.7 | epochs=100 | batch=256 | seed=43 | split_seed=42
+Loss weighting: turn_weight=0 (continuous, threshold 45°) | z_weight=1 | time_weighting=step
+Teacher: /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/configs/teacher_dit_cfm_20M.json → /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/1_teacher/dit_cfm_20M/best.pt
+Output: /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/3_gru/gru2_2L_256_s43/model
+Training on cuda x 1 GPU(s) — CFM + SWI_DiT distillation (dit_cfm_20M → gru_swi_dit_2_2L_256_student, alpha=0.7, turn_weight=0.0 (continuous), z_weight=1.0, time_weighting=step, seed=43, split_seed=42)
+Batches per epoch: 4,490 train, 536 val (batch_size=256 total, 256 per GPU, num_workers=2 per GPU)
+Teacher: /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/1_teacher/dit_cfm_20M/best.pt (epoch=190, ckpt val_fde=924.4096923828125, fp16 autocast) | {'obs_len': 43, 'fut_len': 43, 'in_dim': 6, 'd_model': 384, 'n_heads': 8, 'n_layers': 8, 'dropout': 0.1, 'use_pos_emb': True, 'use_attn_mask': True} | 20,725,638 params
+Student: gru_swi_dit_2 {'obs_len': 43, 'fut_len': 43, 'in_dim': 6, 'd_model': 256, 'n_heads': 8, 'n_layers': 2, 'dropout': 0.1, 'ff_expansion': 3} | 5,806,342 params
+Teacher val minFDE (this split): 948.2m
+  epoch 001 | batch 500/4,490 (11.1%) | loss 0.6338 (gt 1.0608, kd 0.9812) | 6.7 it/s | elapsed 1.2 min | epoch ETA 9.9 min
+  epoch 001 | batch 1,000/4,490 (22.3%) | loss 0.7491 (gt 0.6780, kd 0.5961) | 6.7 it/s | elapsed 2.5 min | epoch ETA 8.7 min
+  epoch 001 | batch 1,500/4,490 (33.4%) | loss 0.8128 (gt 0.5241, kd 0.4412) | 6.7 it/s | elapsed 3.7 min | epoch ETA 7.4 min
+  epoch 001 | batch 2,000/4,490 (44.5%) | loss 0.8521 (gt 0.4397, kd 0.3563) | 6.7 it/s | elapsed 5.0 min | epoch ETA 6.2 min
+  epoch 001 | batch 2,500/4,490 (55.7%) | loss 0.8776 (gt 0.3856, kd 0.3019) | 6.7 it/s | elapsed 6.2 min | epoch ETA 5.0 min
+  epoch 001 | batch 3,000/4,490 (66.8%) | loss 0.8952 (gt 0.3476, kd 0.2636) | 6.7 it/s | elapsed 7.5 min | epoch ETA 3.7 min
+  epoch 001 | batch 3,500/4,490 (78.0%) | loss 0.9085 (gt 0.3195, kd 0.2352) | 6.7 it/s | elapsed 8.7 min | epoch ETA 2.5 min
+  epoch 001 | batch 4,000/4,490 (89.1%) | loss 0.9189 (gt 0.2977, kd 0.2133) | 6.7 it/s | elapsed 10.0 min | epoch ETA 1.2 min
+Epoch 001 | train 0.926459 (gt 0.280583, kd 0.196123) | val 19.372975 (gt 1.866087, kd 1.794601) | KL end 8.0894 path 10.7221 | rough FDE 23988.5m
+  epoch 002 | batch 500/4,490 (11.1%) | loss 0.9921 (gt 0.1366, kd 0.0514) | 6.7 it/s | elapsed 1.2 min | epoch ETA 9.9 min
+  epoch 002 | batch 1,000/4,490 (22.3%) | loss 0.9954 (gt 0.1359, kd 0.0506) | 6.7 it/s | elapsed 2.5 min | epoch ETA 8.7 min
+  epoch 002 | batch 1,500/4,490 (33.4%) | loss 0.9945 (gt 0.1345, kd 0.0492) | 6.7 it/s | elapsed 3.7 min | epoch ETA 7.4 min
+  epoch 002 | batch 2,000/4,490 (44.5%) | loss 0.9944 (gt 0.1332, kd 0.0479) | 6.7 it/s | elapsed 4.9 min | epoch ETA 6.2 min
+  epoch 002 | batch 2,500/4,490 (55.7%) | loss 0.9942 (gt 0.1322, kd 0.0468) | 6.7 it/s | elapsed 6.2 min | epoch ETA 4.9 min
+  epoch 002 | batch 3,000/4,490 (66.8%) | loss 0.9946 (gt 0.1311, kd 0.0457) | 6.7 it/s | elapsed 7.4 min | epoch ETA 3.7 min
+  epoch 002 | batch 3,500/4,490 (78.0%) | loss 0.9949 (gt 0.1303, kd 0.0448) | 6.7 it/s | elapsed 8.7 min | epoch ETA 2.4 min
+  epoch 002 | batch 4,000/4,490 (89.1%) | loss 0.9950 (gt 0.1294, kd 0.0439) | 6.7 it/s | elapsed 9.9 min | epoch ETA 1.2 min
+Epoch 002 | train 0.995063 (gt 0.128548, kd 0.043081) | val 14.346704 (gt 1.056822, kd 0.979745) | KL end 6.7317 path 9.2825 | rough FDE 12673.0m
+  epoch 003 | batch 500/4,490 (11.1%) | loss 1.0000 (gt 0.1216, kd 0.0360) | 6.7 it/s | elapsed 1.2 min | epoch ETA 9.9 min
+  epoch 003 | batch 1,000/4,490 (22.3%) | loss 0.9978 (gt 0.1210, kd 0.0353) | 6.7 it/s | elapsed 2.5 min | epoch ETA 8.7 min
+  epoch 003 | batch 1,500/4,490 (33.4%) | loss 0.9970 (gt 0.1203, kd 0.0347) | 6.7 it/s | elapsed 3.7 min | epoch ETA 7.4 min
+  epoch 003 | batch 2,000/4,490 (44.5%) | loss 0.9976 (gt 0.1199, kd 0.0342) | 6.7 it/s | elapsed 5.0 min | epoch ETA 6.2 min
+  epoch 003 | batch 2,500/4,490 (55.7%) | loss 0.9982 (gt 0.1195, kd 0.0337) | 6.7 it/s | elapsed 6.2 min | epoch ETA 4.9 min
+  epoch 003 | batch 3,000/4,490 (66.8%) | loss 0.9973 (gt 0.1190, kd 0.0333) | 6.7 it/s | elapsed 7.4 min | epoch ETA 3.7 min
+  epoch 003 | batch 3,500/4,490 (78.0%) | loss 0.9978 (gt 0.1186, kd 0.0328) | 6.7 it/s | elapsed 8.7 min | epoch ETA 2.5 min
+  epoch 003 | batch 4,000/4,490 (89.1%) | loss 0.9975 (gt 0.1182, kd 0.0325) | 6.7 it/s | elapsed 9.9 min | epoch ETA 1.2 min

@@ -1,0 +1,3 @@
+epoch,lr,epoch_time_s,train_loss,train_loss_gt,train_loss_kd,val_loss,val_loss_gt,val_loss_kd,val_kl_endpoint,val_kl_path,val_minfde_rough,val_minfde,loss_scale_gt,loss_scale_kd
+1,1.000e-04,831.2,0.928701,0.288871,0.204471,18.413838,1.857322,1.786799,8.1238,10.6962,24514.5,,0.142813,0.057576
+2,9.998e-05,831.4,0.994572,0.130782,0.045292,13.914049,1.046763,0.970067,6.8742,9.3403,12996.8,,0.122267,0.036740

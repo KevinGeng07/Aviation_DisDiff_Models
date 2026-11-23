@@ -1,0 +1,117 @@
+{
+  "settings": {
+    "ckpt": "best.pt",
+    "n_steps": 20,
+    "amp": null,
+    "nc_path": "/global/scratch/users/kevingeng/aviation-bayen/data/trajectories_adsblol_seq86_stage2.nc",
+    "device": "NVIDIA GeForce RTX 2080 Ti",
+    "accuracy": {
+      "n_samples": 20,
+      "max_batches": null,
+      "turn_deg": 45.0
+    },
+    "latency": {
+      "n_calls": 1000,
+      "batch_size": 64,
+      "n_samples": 1,
+      "n_warmup": 50,
+      "synthetic": false
+    }
+  },
+  "n_windows": 63016,
+  "n_turning": 15023,
+  "results": {
+    "gru1_2L_256": {
+      "params": 5803270,
+      "steps": 20,
+      "amp": false,
+      "accuracy": {
+        "minADE": 296.0412742088815,
+        "minFDE": 555.767383791914,
+        "avgADE": 980.4915298049305,
+        "avgFDE": 2385.975793722031,
+        "minFDE_turn": 1300.9140022083327,
+        "avgFDE_turn": 4787.315498787276,
+        "minADE_p1": 23.205599212646483,
+        "minADE_p99": 2572.608203125,
+        "minFDE_p1": 9.553967189788818,
+        "minFDE_p99": 5595.485864257806
+      },
+      "latency": {
+        "mean_ms": 209.69478479446843,
+        "std_ms": 0.5912052665686934,
+        "min_ms": 206.78953733295202,
+        "p50_ms": 209.84438573941588,
+        "p90_ms": 210.111322440207,
+        "p95_ms": 210.20124866627157,
+        "p99_ms": 210.31964272726327,
+        "max_ms": 211.15859923884273,
+        "ms_per_window": 3.2764810124135693,
+        "windows_per_s": 305.2054921763045
+      }
+    },
+    "gru2_2L_256": {
+      "params": 5806342,
+      "steps": 20,
+      "amp": false,
+      "accuracy": {
+        "minADE": 297.1301884144503,
+        "minFDE": 556.632017330544,
+        "avgADE": 985.9726508260303,
+        "avgFDE": 2393.4552904966595,
+        "minFDE_turn": 1298.7863786432417,
+        "avgFDE_turn": 4824.269572202831,
+        "minADE_p1": 24.522504615783692,
+        "minADE_p99": 2554.8063842773427,
+        "minFDE_p1": 10.179667234420776,
+        "minFDE_p99": 5600.803881835936
+      },
+      "latency": {
+        "mean_ms": 209.28002274176106,
+        "std_ms": 0.35547142255571296,
+        "min_ms": 208.20842497050762,
+        "p50_ms": 209.27267894148827,
+        "p90_ms": 209.7560726571828,
+        "p95_ms": 209.82413629535586,
+        "p99_ms": 209.92438435554504,
+        "max_ms": 210.382048971951,
+        "ms_per_window": 3.2700003553400165,
+        "windows_per_s": 305.8103643221223
+      }
+    },
+    "gru3_1L_256": {
+      "params": 5016838,
+      "steps": 20,
+      "amp": false,
+      "accuracy": {
+        "minADE": 300.0581509836044,
+        "minFDE": 559.5558563189805,
+        "avgADE": 984.2103917556652,
+        "avgFDE": 2387.706285283698,
+        "minFDE_turn": 1313.5596026847375,
+        "avgFDE_turn": 4858.562465807637,
+        "minADE_p1": 25.332329273223877,
+        "minADE_p99": 2565.639294433592,
+        "minFDE_p1": 9.844413232803344,
+        "minFDE_p99": 5644.677563476553
+      },
+      "latency": {
+        "mean_ms": 178.5374643020332,
+        "std_ms": 1.0277739233517242,
+        "min_ms": 177.41624685004354,
+        "p50_ms": 178.3924736082554,
+        "p90_ms": 178.93711738288403,
+        "p95_ms": 179.1337132686749,
+        "p99_ms": 183.35888840258121,
+        "max_ms": 189.65464923530817,
+        "ms_per_window": 2.7896478797192685,
+        "windows_per_s": 358.4681806151941
+      }
+    }
+  },
+  "folders": {
+    "gru1_2L_256": "finished_ckpt/3_gru/gru1_2L_256/model",
+    "gru2_2L_256": "finished_ckpt/3_gru/gru2_2L_256/model",
+    "gru3_1L_256": "finished_ckpt/3_gru/gru3_1L_256/model"
+  }
+}
