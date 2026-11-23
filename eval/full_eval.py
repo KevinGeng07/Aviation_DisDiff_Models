@@ -50,6 +50,10 @@ def main():
                    help="fp16 autocast; default: on for models whose config sets eval_amp (on CUDA), else fp32")
     p.add_argument("--num_workers", type=int, default=2)
     p.add_argument("--out", default=None, help="JSON file (resumable); default results/eval/full_eval_b<B>.json")
+    p.add_argument("--redo", nargs="+", default=[], metavar="NAME",
+                   help="models already in --out to evaluate again (e.g. dit_cfm_20M); their old entries "
+                        "are replaced. Use it only for the first submission: a resubmission with --redo "
+                        "would throw away the new result too")
     # accuracy (evaluate.py)
     p.add_argument("--n_samples", type=int, default=20, help="accuracy: K futures sampled per window")
     p.add_argument("--batch_size", type=int, default=256, help="accuracy: test windows per batch")
@@ -105,6 +109,11 @@ def main():
         state = prev
         print(f"Resuming {out}: {len(state['results'])} model(s) started")
     results, done = state["results"], state["folders"]
+    for name in args.redo:                 # forget these so they are evaluated again
+        if results.pop(name, None) is None:
+            sys.exit(f"--redo {name}: not in {out} (models in it: {', '.join(results) or 'none'})")
+        done.pop(name, None)
+        print(f"--redo: dropped {name}; it will be evaluated again")
 
     def save():
         out.parent.mkdir(parents=True, exist_ok=True)

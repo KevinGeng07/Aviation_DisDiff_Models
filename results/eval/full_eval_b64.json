@@ -111,7 +111,7 @@
     "dit_cfm_20M": {
       "params": 20725638,
       "steps": 20,
-      "amp": true,
+      "amp": true, 
       "accuracy": {
         "minADE": 308.096943106463,
         "minFDE": 581.1223318408222,
