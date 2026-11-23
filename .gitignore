@@ -6,6 +6,8 @@ __pycache__/
 Data/adsb/
 *.nc
 *.csv
+# ...except training curves of finished runs
+!finished_ckpt/**/metrics.csv
 # matches checkpoints/ at any depth, incl. training/checkpoints/
 checkpoints/
 checkpoints_cfm/
