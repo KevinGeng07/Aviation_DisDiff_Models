@@ -1,0 +1,63 @@
+Script: eval/latency.py | folders: finished_ckpt/1_teacher/dit_cfm_20M finished_ckpt/2_architecture | extra args: none
+Device: NVIDIA GeForce RTX 2080 Ti
+
+=== finished_ckpt/1_teacher/dit_cfm_20M ===
+Checkpoint: finished_ckpt/1_teacher/dit_cfm_20M/best.pt (epoch 190) | fp16 sampling by default (--no-amp to turn off)
+Model: dit_cfm {'obs_len': 43, 'fut_len': 43, 'in_dim': 6, 'd_model': 384, 'n_heads': 8, 'n_layers': 8, 'dropout': 0.1, 'use_pos_emb': True, 'use_attn_mask': True} | 20,725,638 params
+  1000/10000 windows | running mean 142.60 ms  2000/10000 windows | running mean 142.87 ms  3000/10000 windows | running mean 142.97 ms  4000/10000 windows | running mean 143.14 ms  5000/10000 windows | running mean 143.43 ms  6000/10000 windows | running mean 143.80 ms  7000/10000 windows | running mean 144.21 ms  8000/10000 windows | running mean 144.34 ms  9000/10000 windows | running mean 144.42 ms  10000/10000 windows | running mean 144.49 ms
+  mean 144.49 ms | p50 144.17 | p99 150.51 | 6.9 windows/s | saved to /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/results/eval/eval_latency.json
+
+=== finished_ckpt/2_architecture/distill_2_128/model ===
+Checkpoint: finished_ckpt/2_architecture/distill_2_128/model/best.pt (epoch 94)
+Model: swi_dit {'obs_len': 43, 'fut_len': 43, 'in_dim': 6, 'd_model': 128, 'n_heads': 8, 'n_layers': 2, 'dropout': 0.1, 'ff_expansion': 6} | 999,046 params
+  1000/10000 windows | running mean 45.97 ms  2000/10000 windows | running mean 45.84 ms  3000/10000 windows | running mean 45.74 ms  4000/10000 windows | running mean 45.73 ms  5000/10000 windows | running mean 45.64 ms  6000/10000 windows | running mean 45.57 ms  7000/10000 windows | running mean 45.54 ms  8000/10000 windows | running mean 45.54 ms  9000/10000 windows | running mean 45.56 ms  10000/10000 windows | running mean 45.59 ms
+  mean 45.59 ms | p50 45.41 | p99 49.50 | 21.9 windows/s | saved to /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/results/eval/eval_latency.json
+
+=== finished_ckpt/2_architecture/distill_2_256/model ===
+Checkpoint: finished_ckpt/2_architecture/distill_2_256/model/best.pt (epoch 94)
+Model: swi_dit {'obs_len': 43, 'fut_len': 43, 'in_dim': 6, 'd_model': 256, 'n_heads': 8, 'n_layers': 2, 'dropout': 0.1, 'ff_expansion': 3} | 2,784,518 params
+  1000/10000 windows | running mean 46.79 ms  2000/10000 windows | running mean 46.76 ms  3000/10000 windows | running mean 46.78 ms  4000/10000 windows | running mean 46.78 ms  5000/10000 windows | running mean 46.71 ms  6000/10000 windows | running mean 46.68 ms  7000/10000 windows | running mean 46.69 ms  8000/10000 windows | running mean 46.69 ms  9000/10000 windows | running mean 46.70 ms  10000/10000 windows | running mean 46.69 ms
+  mean 46.69 ms | p50 46.52 | p99 51.31 | 21.4 windows/s | saved to /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/results/eval/eval_latency.json
+
+=== finished_ckpt/2_architecture/distill_2_384/model ===
+Checkpoint: finished_ckpt/2_architecture/distill_2_384/model/best.pt (epoch 99)
+Model: swi_dit {'obs_len': 43, 'fut_len': 43, 'in_dim': 6, 'd_model': 384, 'n_heads': 8, 'n_layers': 2, 'dropout': 0.1, 'ff_expansion': 2} | 5,356,422 params
+  1000/10000 windows | running mean 46.18 ms  2000/10000 windows | running mean 46.18 ms  3000/10000 windows | running mean 46.16 ms  4000/10000 windows | running mean 46.12 ms  5000/10000 windows | running mean 46.09 ms  6000/10000 windows | running mean 46.03 ms  7000/10000 windows | running mean 46.03 ms  8000/10000 windows | running mean 46.04 ms  9000/10000 windows | running mean 46.05 ms  10000/10000 windows | running mean 46.03 ms
+  mean 46.03 ms | p50 45.96 | p99 48.68 | 21.7 windows/s | saved to /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/results/eval/eval_latency.json
+
+=== finished_ckpt/2_architecture/distill_4_128/model ===
+Checkpoint: finished_ckpt/2_architecture/distill_4_128/model/best.pt (epoch 99)
+Model: swi_dit {'obs_len': 43, 'fut_len': 43, 'in_dim': 6, 'd_model': 128, 'n_heads': 8, 'n_layers': 4, 'dropout': 0.1, 'ff_expansion': 6} | 1,853,062 params
+  1000/10000 windows | running mean 74.38 ms  2000/10000 windows | running mean 74.29 ms  3000/10000 windows | running mean 74.32 ms  4000/10000 windows | running mean 74.31 ms  5000/10000 windows | running mean 74.28 ms  6000/10000 windows | running mean 74.25 ms  7000/10000 windows | running mean 74.23 ms  8000/10000 windows | running mean 74.22 ms  9000/10000 windows | running mean 74.13 ms  10000/10000 windows | running mean 74.11 ms
+  mean 74.11 ms | p50 74.06 | p99 78.25 | 13.5 windows/s | saved to /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/results/eval/eval_latency.json
+
+=== finished_ckpt/2_architecture/distill_4_256/model ===
+Checkpoint: finished_ckpt/2_architecture/distill_4_256/model/best.pt (epoch 84)
+Model: swi_dit {'obs_len': 43, 'fut_len': 43, 'in_dim': 6, 'd_model': 256, 'n_heads': 8, 'n_layers': 4, 'dropout': 0.1, 'ff_expansion': 3} | 5,016,838 params
+  1000/10000 windows | running mean 75.97 ms  2000/10000 windows | running mean 75.94 ms  3000/10000 windows | running mean 75.94 ms  4000/10000 windows | running mean 75.82 ms  5000/10000 windows | running mean 75.62 ms  6000/10000 windows | running mean 75.31 ms  7000/10000 windows | running mean 75.04 ms  8000/10000 windows | running mean 74.95 ms  9000/10000 windows | running mean 74.79 ms  10000/10000 windows | running mean 74.59 ms
+  mean 74.59 ms | p50 74.45 | p99 79.07 | 13.4 windows/s | saved to /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/results/eval/eval_latency.json
+
+=== finished_ckpt/2_architecture/distill_4_384/model ===
+Checkpoint: finished_ckpt/2_architecture/distill_4_384/model/best.pt (epoch 99)
+Model: swi_dit {'obs_len': 43, 'fut_len': 43, 'in_dim': 6, 'd_model': 384, 'n_heads': 8, 'n_layers': 4, 'dropout': 0.1, 'ff_expansion': 2} | 9,491,334 params
+  1000/10000 windows | running mean 71.42 ms  2000/10000 windows | running mean 71.28 ms  3000/10000 windows | running mean 71.38 ms  4000/10000 windows | running mean 71.38 ms  5000/10000 windows | running mean 71.39 ms  6000/10000 windows | running mean 71.36 ms  7000/10000 windows | running mean 71.34 ms  8000/10000 windows | running mean 71.33 ms  9000/10000 windows | running mean 71.33 ms  10000/10000 windows | running mean 71.31 ms
+  mean 71.31 ms | p50 71.19 | p99 74.40 | 14.0 windows/s | saved to /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/results/eval/eval_latency.json
+
+=== finished_ckpt/2_architecture/distill_6_128/model ===
+Checkpoint: finished_ckpt/2_architecture/distill_6_128/model/best.pt (epoch 99)
+Model: swi_dit {'obs_len': 43, 'fut_len': 43, 'in_dim': 6, 'd_model': 128, 'n_heads': 8, 'n_layers': 6, 'dropout': 0.1, 'ff_expansion': 6} | 2,707,078 params
+  1000/10000 windows | running mean 100.84 ms  2000/10000 windows | running mean 101.06 ms  3000/10000 windows | running mean 101.49 ms  4000/10000 windows | running mean 102.00 ms  5000/10000 windows | running mean 102.15 ms  6000/10000 windows | running mean 102.40 ms  7000/10000 windows | running mean 102.43 ms  8000/10000 windows | running mean 102.52 ms  9000/10000 windows | running mean 102.45 ms  10000/10000 windows | running mean 102.32 ms
+  mean 102.32 ms | p50 102.20 | p99 108.31 | 9.8 windows/s | saved to /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/results/eval/eval_latency.json
+
+NVIDIA GeForce RTX 2080 Ti | 10,000 windows per model, batch 1 | K=1 | 20 Euler steps (progressive: own) | milliseconds
+model                  params         steps       mean_ms        std_ms        p50_ms        p90_ms        p99_ms        max_ms windows_per_s
+dit_cfm_20M        20,725,638            20        144.49          3.32        144.17        147.37        150.51        390.63          6.92
+distill_2_128         999,046            20         45.59          1.08         45.41         46.90         49.50         54.21         21.94
+distill_2_256       2,784,518            20         46.69          1.29         46.52         48.20         51.31         56.57         21.42
+distill_2_384       5,356,422            20         46.03          0.84         45.96         46.99         48.68         52.76         21.72
+distill_4_128       1,853,062            20         74.11          1.35         74.06         75.71         78.25         83.19         13.49
+distill_4_256       5,016,838            20         74.59          1.75         74.45         76.89         79.07         83.97         13.41
+distill_4_384       9,491,334            20         71.31          1.17         71.19         72.88         74.40         79.57         14.02
+distill_6_128       2,707,078            20        102.32          2.26        102.20        104.97        108.31        181.39          9.77
+
+Saved results to /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/results/eval/eval_latency.json

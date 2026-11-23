@@ -1,0 +1,6 @@
+usage: latency.py [-h] [--nc_path NC_PATH] [--ckpt CKPT]
+                  [--n_windows N_WINDOWS] [--n_samples N_SAMPLES]
+                  [--n_steps N_STEPS] [--n_warmup N_WARMUP] [--device DEVICE]
+                  [--amp | --no-amp] [--num_workers NUM_WORKERS] [--out OUT]
+                  [folders ...]
+latency.py: error: unrecognized arguments: --batch_size --n_calls 1000

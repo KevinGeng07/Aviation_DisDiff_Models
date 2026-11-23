@@ -1,0 +1,92 @@
+Script: eval/latency.py | folders: every model in finished_ckpt/ | extra args: --batch_size 64 --n_calls 1000
+Device: NVIDIA GeForce RTX 2080 Ti | 1,000 calls × 64 test window(s) × 1 future(s)
+
+=== /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/1_teacher/dit_cfm_20M ===
+Checkpoint: /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/1_teacher/dit_cfm_20M/best.pt (epoch 190) | fp16 sampling by default (--no-amp to turn off)
+Model: dit_cfm {'obs_len': 43, 'fut_len': 43, 'in_dim': 6, 'd_model': 384, 'n_heads': 8, 'n_layers': 8, 'dropout': 0.1, 'use_pos_emb': True, 'use_attn_mask': True} | 20,725,638 params
+  63,016 test windows available for 64,000 needed; batches wrap around
+  1000/1000 calls | running mean 193.66 ms
+  mean 193.66 ms/call | p50 194.47 | p99 197.21 | 3.026 ms/window | 330 windows/s | saved to /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/results/eval/eval_latency_b64.json
+
+=== /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/1_teacher/dit_cfm_7M ===
+Checkpoint: /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/1_teacher/dit_cfm_7M/best.pt (epoch 188)
+Model: dit_cfm {'obs_len': 43, 'fut_len': 43, 'in_dim': 6, 'd_model': 256, 'n_heads': 8, 'n_layers': 6, 'dropout': 0.1, 'use_pos_emb': True, 'use_attn_mask': True} | 7,125,766 params
+  1000/1000 calls | running mean 200.96 ms
+  mean 200.96 ms/call | p50 201.28 | p99 205.31 | 3.140 ms/window | 318 windows/s | saved to /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/results/eval/eval_latency_b64.json
+
+=== /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/2_architecture/distill_2_128/model ===
+Checkpoint: /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/2_architecture/distill_2_128/model/best.pt (epoch 94)
+Model: swi_dit {'obs_len': 43, 'fut_len': 43, 'in_dim': 6, 'd_model': 128, 'n_heads': 8, 'n_layers': 2, 'dropout': 0.1, 'ff_expansion': 6} | 999,046 params
+  1000/1000 calls | running mean 47.56 ms
+  mean 47.56 ms/call | p50 46.99 | p99 51.45 | 0.743 ms/window | 1,346 windows/s | saved to /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/results/eval/eval_latency_b64.json
+
+=== /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/2_architecture/distill_2_256/model ===
+Checkpoint: /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/2_architecture/distill_2_256/model/best.pt (epoch 94)
+Model: swi_dit {'obs_len': 43, 'fut_len': 43, 'in_dim': 6, 'd_model': 256, 'n_heads': 8, 'n_layers': 2, 'dropout': 0.1, 'ff_expansion': 3} | 2,784,518 params
+  1000/1000 calls | running mean 76.36 ms
+  mean 76.36 ms/call | p50 76.48 | p99 77.85 | 1.193 ms/window | 838 windows/s | saved to /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/results/eval/eval_latency_b64.json
+
+=== /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/2_architecture/distill_2_384/model ===
+Checkpoint: /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/2_architecture/distill_2_384/model/best.pt (epoch 99)
+Model: swi_dit {'obs_len': 43, 'fut_len': 43, 'in_dim': 6, 'd_model': 384, 'n_heads': 8, 'n_layers': 2, 'dropout': 0.1, 'ff_expansion': 2} | 5,356,422 params
+  1000/1000 calls | running mean 111.98 ms
+  mean 111.98 ms/call | p50 112.19 | p99 114.61 | 1.750 ms/window | 572 windows/s | saved to /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/results/eval/eval_latency_b64.json
+
+=== /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/2_architecture/distill_4_128/model ===
+Checkpoint: /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/2_architecture/distill_4_128/model/best.pt (epoch 99)
+Model: swi_dit {'obs_len': 43, 'fut_len': 43, 'in_dim': 6, 'd_model': 128, 'n_heads': 8, 'n_layers': 4, 'dropout': 0.1, 'ff_expansion': 6} | 1,853,062 params
+  1000/1000 calls | running mean 88.10 ms
+  mean 88.10 ms/call | p50 88.16 | p99 89.74 | 1.377 ms/window | 726 windows/s | saved to /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/results/eval/eval_latency_b64.json
+
+=== /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/2_architecture/distill_4_256/model ===
+Checkpoint: /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/2_architecture/distill_4_256/model/best.pt (epoch 84)
+Model: swi_dit {'obs_len': 43, 'fut_len': 43, 'in_dim': 6, 'd_model': 256, 'n_heads': 8, 'n_layers': 4, 'dropout': 0.1, 'ff_expansion': 3} | 5,016,838 params
+  1000/1000 calls | running mean 143.42 ms
+  mean 143.42 ms/call | p50 143.66 | p99 146.33 | 2.241 ms/window | 446 windows/s | saved to /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/results/eval/eval_latency_b64.json
+
+=== /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/2_architecture/distill_4_384/model ===
+Checkpoint: /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/2_architecture/distill_4_384/model/best.pt (epoch 99)
+Model: swi_dit {'obs_len': 43, 'fut_len': 43, 'in_dim': 6, 'd_model': 384, 'n_heads': 8, 'n_layers': 4, 'dropout': 0.1, 'ff_expansion': 2} | 9,491,334 params
+  1000/1000 calls | running mean 208.54 ms
+  mean 208.54 ms/call | p50 208.78 | p99 212.50 | 3.258 ms/window | 307 windows/s | saved to /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/results/eval/eval_latency_b64.json
+
+=== /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/2_architecture/distill_6_128/model ===
+Checkpoint: /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/2_architecture/distill_6_128/model/best.pt (epoch 99)
+Model: swi_dit {'obs_len': 43, 'fut_len': 43, 'in_dim': 6, 'd_model': 128, 'n_heads': 8, 'n_layers': 6, 'dropout': 0.1, 'ff_expansion': 6} | 2,707,078 params
+  1000/1000 calls | running mean 129.34 ms
+  mean 129.34 ms/call | p50 129.50 | p99 131.69 | 2.021 ms/window | 495 windows/s | saved to /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/results/eval/eval_latency_b64.json
+
+=== /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/3_gru/gru1_2L_256/model ===
+Checkpoint: /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/3_gru/gru1_2L_256/model/best.pt (epoch 44)
+Model: gru_swi_dit {'obs_len': 43, 'fut_len': 43, 'in_dim': 6, 'd_model': 256, 'n_heads': 8, 'n_layers': 2, 'dropout': 0.1, 'ff_expansion': 3} | 5,803,270 params
+  1000/1000 calls | running mean 218.08 ms
+  mean 218.08 ms/call | p50 218.26 | p99 221.35 | 3.408 ms/window | 293 windows/s | saved to /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/results/eval/eval_latency_b64.json
+
+=== /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/3_gru/gru2_2L_256/model ===
+Checkpoint: /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/3_gru/gru2_2L_256/model/best.pt (epoch 44)
+Model: gru_swi_dit_2 {'obs_len': 43, 'fut_len': 43, 'in_dim': 6, 'd_model': 256, 'n_heads': 8, 'n_layers': 2, 'dropout': 0.1, 'ff_expansion': 3} | 5,806,342 params
+  1000/1000 calls | running mean 214.14 ms
+  mean 214.14 ms/call | p50 214.28 | p99 217.14 | 3.346 ms/window | 299 windows/s | saved to /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/results/eval/eval_latency_b64.json
+
+=== /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/3_gru/gru3_1L_256/model ===
+Checkpoint: /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/3_gru/gru3_1L_256/model/best.pt (epoch 39)
+Model: gru_swi_dit_3 {'obs_len': 43, 'fut_len': 43, 'in_dim': 6, 'd_model': 256, 'n_heads': 8, 'n_layers': 1, 'dropout': 0.1, 'ff_expansion': 3} | 5,016,838 params
+  1000/1000 calls | running mean 192.64 ms
+  mean 192.64 ms/call | p50 192.75 | p99 195.65 | 3.010 ms/window | 332 windows/s | saved to /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/results/eval/eval_latency_b64.json
+
+NVIDIA GeForce RTX 2080 Ti | 1,000 calls per model × batch 64 (test windows) | K=1 | 20 Euler steps (progressive: own) | milliseconds per call unless noted
+model                  params         steps       mean_ms        std_ms        p50_ms        p90_ms        p99_ms        max_ms ms_per_window windows_per_s
+dit_cfm_20M        20,725,638            20       193.665         1.482       194.470       194.772       197.212       197.987         3.026           330
+dit_cfm_7M          7,125,766            20       200.955         1.200       201.282       202.192       205.310       206.073         3.140           318
+distill_2_128         999,046            20        47.558         1.447        46.989        50.768        51.446        52.692         0.743         1,346
+distill_2_256       2,784,518            20        76.363         0.418        76.478        76.697        77.845        78.572         1.193           838
+distill_2_384       5,356,422            20       111.982         0.688       112.189       112.489       114.614       116.391         1.750           572
+distill_4_128       1,853,062            20        88.101         0.436        88.158        88.454        89.741        90.426         1.377           726
+distill_4_256       5,016,838            20       143.417         0.836       143.661       144.125       146.332       148.738         2.241           446
+distill_4_384       9,491,334            20       208.540         1.289       208.778       209.840       212.497       213.147         3.258           307
+distill_6_128       2,707,078            20       129.338         0.649       129.499       129.807       131.691       132.506         2.021           495
+gru1_2L_256         5,803,270            20       218.080         0.880       218.260       218.713       221.345       223.099         3.408           293
+gru2_2L_256         5,806,342            20       214.136         0.862       214.282       214.864       217.144       219.840         3.346           299
+gru3_1L_256         5,016,838            20       192.641         0.829       192.748       193.356       195.652       197.346         3.010           332
+
+Saved results to /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/results/eval/eval_latency_b64.json

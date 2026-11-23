@@ -1,0 +1,25 @@
+Python: /global/home/users/kevingeng/.conda/envs/adsb/bin/python
+torch 2.14.1+cu130 | netCDF4 1.7.4
+CUDA available: True
+Device: NVIDIA GeForce RTX 2080 Ti
+Run: gru1_2L_256 | student: /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/configs/students/gru1_2L_256.json | gpus=1 | alpha=0.7 | epochs=100 | batch=256 | seed=42 | split_seed=42
+Loss weighting: turn_weight=0 (continuous, threshold 45°) | z_weight=1 | time_weighting=step
+Teacher: /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/configs/teacher_dit_cfm_20M.json → /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/1_teacher/dit_cfm_20M/best.pt
+Output: /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/3_gru/gru1_2L_256/model
+Training on cuda x 1 GPU(s) — CFM + SWI_DiT distillation (dit_cfm_20M → gru_swi_dit_2L_256_student, alpha=0.7, turn_weight=0.0 (continuous), z_weight=1.0, time_weighting=step, seed=42, split_seed=42)
+Batches per epoch: 4,490 train, 536 val (batch_size=256 total, 256 per GPU, num_workers=2 per GPU)
+Teacher: /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/1_teacher/dit_cfm_20M/best.pt (epoch=190, ckpt val_fde=924.4096923828125, fp16 autocast) | {'obs_len': 43, 'fut_len': 43, 'in_dim': 6, 'd_model': 384, 'n_heads': 8, 'n_layers': 8, 'dropout': 0.1, 'use_pos_emb': True, 'use_attn_mask': True} | 20,725,638 params
+Student: gru_swi_dit {'obs_len': 43, 'fut_len': 43, 'in_dim': 6, 'd_model': 256, 'n_heads': 8, 'n_layers': 2, 'dropout': 0.1, 'ff_expansion': 3} | 5,803,270 params
+Resuming from /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/3_gru/gru1_2L_256/model/last.pt...
+Resumed at epoch 99
+Teacher val minFDE (this split): 951.6m
+  epoch 100 | batch 500/4,490 (11.1%) | loss 0.9983 (gt 0.0875, kd 0.0029) | 6.3 it/s | elapsed 1.3 min | epoch ETA 10.5 min
+  epoch 100 | batch 1,000/4,490 (22.3%) | loss 0.9991 (gt 0.0875, kd 0.0029) | 6.3 it/s | elapsed 2.6 min | epoch ETA 9.2 min
+  epoch 100 | batch 1,500/4,490 (33.4%) | loss 0.9997 (gt 0.0877, kd 0.0029) | 6.4 it/s | elapsed 3.9 min | epoch ETA 7.8 min
+  epoch 100 | batch 2,000/4,490 (44.5%) | loss 1.0000 (gt 0.0878, kd 0.0029) | 6.4 it/s | elapsed 5.2 min | epoch ETA 6.5 min
+  epoch 100 | batch 2,500/4,490 (55.7%) | loss 1.0001 (gt 0.0878, kd 0.0029) | 6.4 it/s | elapsed 6.5 min | epoch ETA 5.2 min
+  epoch 100 | batch 3,000/4,490 (66.8%) | loss 1.0000 (gt 0.0878, kd 0.0029) | 6.4 it/s | elapsed 7.8 min | epoch ETA 3.9 min
+  epoch 100 | batch 3,500/4,490 (78.0%) | loss 0.9998 (gt 0.0879, kd 0.0029) | 6.4 it/s | elapsed 9.2 min | epoch ETA 2.6 min
+  epoch 100 | batch 4,000/4,490 (89.1%) | loss 1.0000 (gt 0.0878, kd 0.0029) | 6.4 it/s | elapsed 10.5 min | epoch ETA 1.3 min
+Epoch 100 | train 0.999617 (gt 0.087781, kd 0.002895) | val 0.979264 (gt 0.084171, kd 0.002861) | KL end 0.5308 path 1.0455 | rough FDE 952.9m | proper FDE 961.5m (teacher 951.6m)  ✓ best
+Job finished at Sun Nov 22 14:41:23 PST 2026 with exit code 0

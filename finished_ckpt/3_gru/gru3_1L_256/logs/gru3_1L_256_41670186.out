@@ -1,0 +1,5 @@
+Python: /global/home/users/kevingeng/.conda/envs/adsb/bin/python
+torch 2.14.1+cu130 | netCDF4 1.7.4
+CUDA available: True
+Device: NVIDIA GeForce RTX 2080 Ti
+Teacher checkpoint not found: /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/finished_ckpt/1_teacher/dit_cfm_20M/best.pt (set TEACHER_CKPT=...)

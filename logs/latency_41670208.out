@@ -1,0 +1,7 @@
+Script: eval/latency.py | folders: finished_ckpt/1_teacher/dit_cfm_20M finished_ckpt/2_architecture | extra args: none
+Device: NVIDIA GeForce RTX 2080 Ti
+
+=== finished_ckpt/1_teacher/dit_cfm_20M ===
+Decompressing 3 parts: best.pt.gz.part000, best.pt.gz.part001, best.pt.gz.part002
+Checkpoint: finished_ckpt/1_teacher/dit_cfm_20M/best.pt (epoch 190) | fp16 sampling by default (--no-amp to turn off)
+Model: dit_cfm {'obs_len': 43, 'fut_len': 43, 'in_dim': 6, 'd_model': 384, 'n_heads': 8, 'n_layers': 8, 'dropout': 0.1, 'use_pos_emb': True, 'use_attn_mask': True} | 20,725,638 params
