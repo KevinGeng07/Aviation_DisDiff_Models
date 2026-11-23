@@ -27,6 +27,8 @@ Errors are distances in metres between predicted and true (x, y) positions:
     avg  = error averaged over the K samples            (how good is a typical sample)
     p1 / p99 = 1st / 99th percentile over test windows of minADE and minFDE
                (the easiest and hardest 1% of windows; the plain values are means)
+    *_std    = standard deviation over test windows of each metric (how much the error
+               varies from window to window; NOT run-to-run variation across training seeds)
 
 So you get minADE, minFDE, avgADE, avgFDE, each averaged over all test windows,
 and minFDE_turn / avgFDE_turn: the same over only the windows whose true future
@@ -206,7 +208,8 @@ def evaluate(model, test_loader, feat_mean, feat_std, device, n_samples, n_steps
     totals = {"minADE": 0.0, "minFDE": 0.0, "avgADE": 0.0, "avgFDE": 0.0,
               "minFDE_turn": 0.0, "avgFDE_turn": 0.0}
     n_windows = n_turn = 0
-    per_window = {"minADE": [], "minFDE": []}   # kept per window for the percentiles
+    # kept per window for the percentiles and standard deviations
+    per_window = {k: [] for k in totals}
 
     with torch.no_grad():
         for b, batch in enumerate(test_loader):
@@ -226,18 +229,15 @@ def evaluate(model, test_loader, feat_mean, feat_std, device, n_samples, n_steps
             ade = err.mean(dim=-1)                              # (K, B) average over steps
             fde = err[..., -1]                                  # (K, B) last step
 
-            min_ade, min_fde = ade.min(dim=0).values, fde.min(dim=0).values   # (B,)
-            totals["minADE"] += min_ade.sum().item()
-            totals["minFDE"] += min_fde.sum().item()
-            per_window["minADE"].append(min_ade.cpu())
-            per_window["minFDE"].append(min_fde.cpu())
-            totals["avgADE"] += ade.mean(dim=0).sum().item()
-            totals["avgFDE"] += fde.mean(dim=0).sum().item()
-            n_windows += obs.shape[0]
-
             turning = turn_angle(obs, fut, mean_t, std_t) >= turn_deg     # (B,)
-            totals["minFDE_turn"] += fde.min(dim=0).values[turning].sum().item()
-            totals["avgFDE_turn"] += fde.mean(dim=0)[turning].sum().item()
+            min_fde, avg_fde = fde.min(dim=0).values, fde.mean(dim=0)
+            window = {"minADE": ade.min(dim=0).values, "minFDE": min_fde,          # each (B,)
+                      "avgADE": ade.mean(dim=0),       "avgFDE": avg_fde,
+                      "minFDE_turn": min_fde[turning], "avgFDE_turn": avg_fde[turning]}
+            for k, v in window.items():
+                totals[k] += v.sum().item()
+                per_window[k].append(v.cpu())
+            n_windows += obs.shape[0]
             n_turn += turning.sum().item()
             print(f"  batch {b + 1}/{len(test_loader)} | running minFDE "
                   f"{totals['minFDE'] / n_windows:.1f}m", end="\r", flush=True)
@@ -245,9 +245,13 @@ def evaluate(model, test_loader, feat_mean, feat_std, device, n_samples, n_steps
     print()
     results = {k: v / (max(n_turn, 1) if k.endswith("_turn") else n_windows)
                for k, v in totals.items()}
-    for k, chunks in per_window.items():   # spread over windows: best-case and worst-case tails
-        p1, p99 = np.percentile(torch.cat(chunks).double().numpy(), [1, 99])
-        results[f"{k}_p1"], results[f"{k}_p99"] = float(p1), float(p99)
+    # spread over test windows: standard deviation, plus best- and worst-case tails
+    for k, chunks in per_window.items():
+        x = torch.cat(chunks).double().numpy()
+        results[f"{k}_std"] = float(x.std(ddof=1)) if x.size > 1 else 0.0
+        if k in ("minADE", "minFDE"):
+            p1, p99 = np.percentile(x, [1, 99])
+            results[f"{k}_p1"], results[f"{k}_p99"] = float(p1), float(p99)
     return results, n_windows, n_turn
 
 
@@ -358,11 +362,12 @@ def main():
 
     # side-by-side summary
     print(f"\nTest set: {n or 0:,} windows ({n_turn or 0:,} turning >= {args.turn_deg:g}°) | K={args.n_samples} samples | {args.n_steps} Euler steps (progressive: own) | metres")
-    names = list(next(iter(all_results.values())))
+    names = list(dict.fromkeys(m for r in all_results.values() for m in r))   # older entries may lack *_std
     width = max(len(k) for k in all_results) + 2
     print("model".ljust(width) + "".join(f"{m:>13}" for m in names))
     for run, results in all_results.items():
-        print(run.ljust(width) + "".join(f"{results[m]:13.1f}" for m in names))
+        print(run.ljust(width) + "".join(f"{results[m]:13.1f}" if m in results else f"{'-':>13}"
+                                         for m in names))
 
     if out is not None:
         print(f"\nSaved results to {out}")

@@ -140,7 +140,8 @@ def main():
                 args.max_batches, args.turn_deg, args.chunk, amp)
             entry["accuracy"] = acc
             save()
-            print("  " + " | ".join(f"{m} {v:.1f}m" for m, v in acc.items()))
+            print("  " + " | ".join(f"{m} {acc[m]:.1f} ± {acc[m + '_std']:.1f} m"
+                                    for m in ("minADE", "minFDE", "avgADE", "avgFDE", "minFDE_turn")))
 
         if "latency" not in entry:
             pool_key = "synthetic" if args.lat_synthetic else seed
