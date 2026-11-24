@@ -1,0 +1,15 @@
+Script: eval/full_eval.py | folders: finished_ckpt/1_teacher/dit_cfm_20M | extra args: none
+Device: NVIDIA GeForce RTX 2080 Ti | accuracy K=20 | latency 1,000 calls × 64 test window(s) × 1 future(s)
+Resuming /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/results/eval/full_eval_b64.json: 5 model(s) started
+
+=== finished_ckpt/1_teacher/dit_cfm_20M === already in /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/results/eval/full_eval_b64.json, skipping
+
+NVIDIA GeForce RTX 2080 Ti | accuracy: 63,016 test windows, K=20, metres | latency: batch 64 × 1,000 calls, ms
+model              params  steps        minADE        minFDE        avgADE        avgFDE   minFDE_turn       mean_ms        p50_ms        p99_ms ms_per_window windows_per_s
+gru1_2L_256     5,803,270     20         296.0         555.8         980.5        2386.0        1300.9       209.695       209.844       210.320         3.276           305
+gru2_2L_256     5,806,342     20         297.1         556.6         986.0        2393.5        1298.8       209.280       209.273       209.924         3.270           306
+gru3_1L_256     5,016,838     20         300.1         559.6         984.2        2387.7        1313.6       178.537       178.392       183.359         2.790           358
+dit_cfm_20M    20,725,638     20         308.1         581.1         905.6        2161.5        1381.7       197.089       197.233       197.823         3.080           325
+dit_cfm_7M      7,125,766     20         306.7         570.2         995.9        2416.4        1353.5       204.909       204.935       205.847         3.202           312
+
+Saved results to /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/results/eval/full_eval_b64.json

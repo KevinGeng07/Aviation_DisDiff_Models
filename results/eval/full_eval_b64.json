@@ -108,41 +108,6 @@
         "windows_per_s": 358.4681806151941
       }
     },
-    "dit_cfm_20M": {
-      "params": 20725638,
-      "steps": 20,
-      "amp": true, 
-      "accuracy": {
-        "minADE": 308.096943106463,
-        "minFDE": 581.1223318408222,
-        "avgADE": 905.5511681185136,
-        "avgFDE": 2161.4784453303528,
-        "minFDE_turn": 1381.7233573803371,
-        "avgFDE_turn": 4417.813824401543,
-        "minADE_std": 589.633182133401,
-        "minADE_p1": 27.682776355743407,
-        "minADE_p99": 2795.6998168945283,
-        "minFDE_std": 1344.4725394439824,
-        "minFDE_p1": 9.558509492874146,
-        "minFDE_p99": 6364.750830078114,
-        "avgADE_std": 1258.7040493553282,
-        "avgFDE_std": 2979.484505184026,
-        "minFDE_turn_std": 2200.4315128699186,
-        "avgFDE_turn_std": 4093.7779610995726
-      },
-      "latency": {
-        "mean_ms": 197.08851715968922,
-        "std_ms": 0.6241985433033881,
-        "min_ms": 194.22697275877,
-        "p50_ms": 197.23311578854918,
-        "p90_ms": 197.59791349060833,
-        "p95_ms": 197.66199216246605,
-        "p99_ms": 197.8230017470196,
-        "max_ms": 197.91946932673454,
-        "ms_per_window": 3.079508080620144,
-        "windows_per_s": 324.7271881808546
-      }
-    },
     "dit_cfm_7M": {
       "params": 7125766,
       "steps": 20,
@@ -177,13 +142,48 @@
         "ms_per_window": 3.2017025924360496,
         "windows_per_s": 312.3338196253698
       }
+    },
+    "dit_cfm_20M": {
+      "params": 20725638,
+      "steps": 20,
+      "amp": false,
+      "accuracy": {
+        "minADE": 307.3024914741395,
+        "minFDE": 581.1469727182382,
+        "avgADE": 904.8909454791243,
+        "avgFDE": 2161.2281061307845,
+        "minFDE_turn": 1381.774399623377,
+        "avgFDE_turn": 4417.683792663749,
+        "minADE_std": 589.8917710984222,
+        "minADE_p1": 25.673674297332763,
+        "minADE_p99": 2798.951232910155,
+        "minFDE_std": 1344.7082597670992,
+        "minFDE_p1": 10.096566820144654,
+        "minFDE_p99": 6356.007592773428,
+        "avgADE_std": 1259.23455137775,
+        "avgFDE_std": 2980.4364822121347,
+        "minFDE_turn_std": 2200.758586379502,
+        "avgFDE_turn_std": 4095.2164731113753
+      },
+      "latency": {
+        "mean_ms": 464.6536958324723,
+        "std_ms": 1.1291136380563678,
+        "min_ms": 458.8861810043454,
+        "p50_ms": 464.86022556200624,
+        "p90_ms": 465.6188958790153,
+        "p95_ms": 465.8303465694189,
+        "p99_ms": 466.17494554258883,
+        "max_ms": 466.541918925941,
+        "ms_per_window": 7.26021399738238,
+        "windows_per_s": 137.73698686575122
+      }
     }
   },
   "folders": {
     "gru1_2L_256": "finished_ckpt/3_gru/gru1_2L_256/model",
     "gru2_2L_256": "finished_ckpt/3_gru/gru2_2L_256/model",
     "gru3_1L_256": "finished_ckpt/3_gru/gru3_1L_256/model",
-    "dit_cfm_20M": "finished_ckpt/1_teacher/dit_cfm_20M",
-    "dit_cfm_7M": "finished_ckpt/1_teacher/dit_cfm_7M"
+    "dit_cfm_7M": "finished_ckpt/1_teacher/dit_cfm_7M",
+    "dit_cfm_20M": "finished_ckpt/1_teacher/dit_cfm_20M"
   }
 }
