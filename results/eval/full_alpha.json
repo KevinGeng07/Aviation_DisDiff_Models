@@ -1,0 +1,99 @@
+{
+  "settings": {
+    "ckpt": "best.pt",
+    "n_steps": 20,
+    "amp": null,
+    "nc_path": "/global/scratch/users/kevingeng/aviation-bayen/data/trajectories_adsblol_seq86_stage2.nc",
+    "device": "NVIDIA GeForce RTX 2080 Ti",
+    "accuracy": {
+      "n_samples": 20,
+      "max_batches": null,
+      "turn_deg": 45.0
+    },
+    "latency": {
+      "n_calls": 1000,
+      "batch_size": 64,
+      "n_samples": 1,
+      "n_warmup": 50,
+      "synthetic": false
+    }
+  },
+  "n_windows": 63016,
+  "n_turning": 15023,
+  "results": {
+    "distill_4_256_a0.1": {
+      "params": 5016838,
+      "steps": 20,
+      "amp": false,
+      "accuracy": {
+        "minADE": 302.06487439697855,
+        "minFDE": 563.4347830250948,
+        "avgADE": 1019.4506330733465,
+        "avgFDE": 2476.0879411454034,
+        "minFDE_turn": 1312.5979567820227,
+        "avgFDE_turn": 4958.364003059892,
+        "minADE_std": 538.0331720734449,
+        "minADE_p1": 24.70797939300537,
+        "minADE_p99": 2526.4056396484334,
+        "minFDE_std": 1139.297027003457,
+        "minFDE_p1": 10.331460523605347,
+        "minFDE_p99": 5540.986743164054,
+        "avgADE_std": 1353.8980107426728,
+        "avgFDE_std": 3218.0956462580816,
+        "minFDE_turn_std": 1774.1535806935724,
+        "avgFDE_turn_std": 4259.833340602719
+      },
+      "latency": {
+        "mean_ms": 167.07232584245503,
+        "std_ms": 2.4286678914301323,
+        "min_ms": 155.57961585000157,
+        "p50_ms": 167.88816475309432,
+        "p90_ms": 168.6731752473861,
+        "p95_ms": 169.05654203146696,
+        "p99_ms": 171.10632001888007,
+        "max_ms": 177.1867759525776,
+        "ms_per_window": 2.61050509128836,
+        "windows_per_s": 383.0676306041874
+      }
+    },
+    "distill_4_256_a0.3": {
+      "params": 5016838,
+      "steps": 20,
+      "amp": false,
+      "accuracy": {
+        "minADE": 301.76352815529987,
+        "minFDE": 565.6127871418569,
+        "avgADE": 1016.2033581687091,
+        "avgFDE": 2468.7715483468482,
+        "minFDE_turn": 1314.150732597387,
+        "avgFDE_turn": 4942.483045528107,
+        "minADE_std": 537.9862587992243,
+        "minADE_p1": 24.419994926452635,
+        "minADE_p99": 2555.6378662109323,
+        "minFDE_std": 1144.077014788712,
+        "minFDE_p1": 10.2122492313385,
+        "minFDE_p99": 5615.990502929681,
+        "avgADE_std": 1351.7137869603844,
+        "avgFDE_std": 3218.7006505817412,
+        "minFDE_turn_std": 1770.8464421772699,
+        "avgFDE_turn_std": 4252.809765298878
+      },
+      "latency": {
+        "mean_ms": 169.18559612659737,
+        "std_ms": 1.9034625760211583,
+        "min_ms": 166.13076627254486,
+        "p50_ms": 169.47746090590954,
+        "p90_ms": 170.61374429613352,
+        "p95_ms": 171.514393761754,
+        "p99_ms": 177.30733738280833,
+        "max_ms": 180.8643490076065,
+        "ms_per_window": 2.643524939478084,
+        "windows_per_s": 378.28279395670535
+      }
+    }
+  },
+  "folders": {
+    "distill_4_256_a0.1": "finished_ckpt/alpha/distill_4_256_a0.1/model",
+    "distill_4_256_a0.3": "finished_ckpt/alpha/distill_4_256_a0.3/model"
+  }
+}

@@ -1,0 +1,9 @@
+Script: eval/full_eval.py | folders: finished_ckpt/2_architecture/distill_4_256 finished_ckpt/2_architecture/distill_4_256_s43 finished_ckpt/3_gru | extra args: none
+Device: NVIDIA GeForce RTX 2080 Ti | accuracy K=20 | latency 1,000 calls × 64 test window(s) × 1 future(s)
+Resuming /global/scratch/users/kevingeng/aviation-bayen/Aviation_DisDiff_Models/results/eval/full_eval_b64.json: 5 model(s) started
+
+=== finished_ckpt/2_architecture/distill_4_256/model ===
+Checkpoint: finished_ckpt/2_architecture/distill_4_256/model/best.pt (epoch 84)
+Model: swi_dit {'obs_len': 43, 'fut_len': 43, 'in_dim': 6, 'd_model': 256, 'n_heads': 8, 'n_layers': 4, 'dropout': 0.1, 'ff_expansion': 3} | 5,016,838 params
+Accuracy:
+  batch 1/247 | running minFDE 485.3m  batch 2/247 | running minFDE 454.5m
