@@ -1,5 +1,5 @@
 """
-Loss weighting (pipeline stage 6): give turning windows and/or the altitude axis a larger
+Loss weighting (pipeline stage 4, path_weighting): give turning windows and/or the altitude axis a larger
 share of the training loss. All weights are rescaled to mean 1, so the loss (and so the
 effective learning rate) stays the same size; strength 0 turns a weighting off.
 
@@ -22,6 +22,22 @@ on the ground) don't count, since their heading is noise.
 then divided by the batch mean. With S = 2, a window turning >= 90° (continuous) or past
 the threshold (step) counts 3× a straight one.
 
+── Vertical-rate weighting (per window, added to the turn weight) ────────────
+
+The vertical counterpart of a turn: how far the vertical rate vz (m/s) moves away from its
+last observed value in the true future (a level-off, start of descent, go-around):
+
+    dvz = max_k |vz_k - vz_last_obs|                               m/s, k = future steps
+    v   = clamp((dvz - deadband) / (ref - deadband), 0, 1)         0..1
+
+deadband (default 1 m/s ≈ 200 ft/min) ignores ADS-B rate jitter on level flight; ref
+(default 10 m/s ≈ 2000 ft/min, a full level-off from a normal climb) is where the weight
+saturates. Same moving-only rule as the turn angle. Combined with the turn weight:
+
+    w = 1 + S · h + S_v · v      h = min(turn / 90°, 1) (continuous) or [turn >= threshold] (step)
+
+then divided by the batch mean. S_v = 0 (default) turns the vertical part off.
+
 ── Z weighting (per feature) ─────────────────────────────────────────────────
 
 Altitude is a small part of the error in metres but matters operationally. --z_weight W
@@ -30,7 +46,7 @@ six weights rescaled to mean 1. W = 1 is off.
 """
 import torch
 
-VX, VY = 3, 4                  # feature order: x, y, z, vx, vy, vz
+VX, VY, VZ = 3, 4, 5           # feature order: x, y, z, vx, vy, vz
 Z_FEATURES = (2, 5)            # z, vz
 TURN_MODES = ("continuous", "step")
 
@@ -47,18 +63,35 @@ def turn_angle(obs, fut, feat_mean, feat_std, min_speed=20.0):
     return diff.amax(dim=1).rad2deg()
 
 
+def vrate_change(obs, fut, feat_mean, feat_std, min_speed=20.0):
+    """m/s the true future vertical rate moves away from the last observed one: (B,)."""
+    feats = torch.cat([obs[:, -1:], fut], dim=1)                             # normalized
+    vel   = feats[..., VX:VZ + 1] * feat_std[VX:VZ + 1] + feat_mean[VX:VZ + 1]   # m/s
+    dvz   = (vel[:, 1:, 2] - vel[:, :1, 2]).abs()
+    moving = vel[..., :2].norm(dim=-1) >= min_speed                         # horizontal speed
+    dvz   = dvz * (moving[:, 1:] & moving[:, :1])
+    return dvz.amax(dim=1)
+
+
 def turn_weights(obs, fut, feat_mean, feat_std, strength, mode="continuous",
-                 ref_deg=90.0, threshold_deg=45.0):
-    """Per-window loss weights with batch mean 1, or None if strength is 0."""
-    if not strength:
+                 ref_deg=90.0, threshold_deg=45.0,
+                 vrate_strength=0.0, vrate_ref=10.0, vrate_deadband=1.0):
+    """Per-window loss weights with batch mean 1, or None if both strengths are 0.
+    w = 1 + strength * h(turn) + vrate_strength * v(vertical-rate change)."""
+    if not strength and not vrate_strength:
         return None
-    turn = turn_angle(obs, fut, feat_mean, feat_std)
-    if mode == "continuous":
-        w = 1.0 + strength * (turn / ref_deg).clamp(max=1.0)
-    elif mode == "step":
-        w = 1.0 + strength * (turn >= threshold_deg).float()
-    else:
-        raise ValueError(f"unknown turn mode {mode!r}; known: {', '.join(TURN_MODES)}")
+    w = torch.ones(obs.shape[0], device=obs.device)
+    if strength:
+        turn = turn_angle(obs, fut, feat_mean, feat_std)
+        if mode == "continuous":
+            w = w + strength * (turn / ref_deg).clamp(max=1.0)
+        elif mode == "step":
+            w = w + strength * (turn >= threshold_deg).float()
+        else:
+            raise ValueError(f"unknown turn mode {mode!r}; known: {', '.join(TURN_MODES)}")
+    if vrate_strength:
+        dvz = vrate_change(obs, fut, feat_mean, feat_std)
+        w = w + vrate_strength * ((dvz - vrate_deadband) / (vrate_ref - vrate_deadband)).clamp(0.0, 1.0)
     return w / w.mean()
 
 

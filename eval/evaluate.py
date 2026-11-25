@@ -10,7 +10,7 @@ Usage (from the repo root):
 
 With no folders, every folder under finished_ckpt/ holding best.pt (or --ckpt) is one
 model, e.g. finished_ckpt/2_architecture/distill_4_256/model and each round of
-finished_ckpt/5_stepwise/progressive_4_256/model/steps_NN; models are named after the
+finished_ckpt/5_stepwise_distillation/progressive_4_256/model/steps_NN; models are named after the
 folder above model/. Every model is scored on the test aircraft of its run's split seed
 (train_config split_seed, 42 throughout the pipeline), so they share one test set. A folder given on the command line can be the run folder itself
 or any parent of it. A checkpoint that was split to fit GitHub's file limit

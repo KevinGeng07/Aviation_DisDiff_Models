@@ -58,6 +58,7 @@ SPLIT_SEED=${SPLIT_SEED:-42}      # train/val/test aircraft split: keep 42 every
 TURN_WEIGHT=${TURN_WEIGHT:-0}     # extra loss weight for turning windows (0 = off)
 TURN_MODE=${TURN_MODE:-continuous}    # continuous | step
 TURN_THRESHOLD=${TURN_THRESHOLD:-45}  # degrees, for TURN_MODE=step
+VRATE_WEIGHT=${VRATE_WEIGHT:-0}   # extra loss weight for vertical-rate changes (0 = off)
 Z_WEIGHT=${Z_WEIGHT:-1}           # altitude-feature loss weight (1 = off)
 TIME_WEIGHTING=${TIME_WEIGHTING:-step}   # step (last quarter x2) | linear (continuous 1 -> 2)
 NGPUS=${NGPUS:-1}                 # >1 → torchrun + DistributedDataParallel (submit_distill_run.sh --gpus N)
@@ -65,7 +66,7 @@ NGPUS=${NGPUS:-1}                 # >1 → torchrun + DistributedDataParallel (s
 OUTPUT_DIR=${OUTPUT_DIR:?set OUTPUT_DIR (submit_distill_run.sh passes <save_dir>/model)}
 
 echo "Run: $RUN_NAME | student: $STUDENT_CONFIG | gpus=$NGPUS | alpha=$ALPHA | epochs=$EPOCHS | batch=$BATCH_SIZE | seed=$SEED | split_seed=$SPLIT_SEED"
-echo "Loss weighting: turn_weight=$TURN_WEIGHT ($TURN_MODE, threshold ${TURN_THRESHOLD}°) | z_weight=$Z_WEIGHT | time_weighting=$TIME_WEIGHTING"
+echo "Loss weighting: turn_weight=$TURN_WEIGHT ($TURN_MODE, threshold ${TURN_THRESHOLD}°) | vrate_weight=$VRATE_WEIGHT | z_weight=$Z_WEIGHT | time_weighting=$TIME_WEIGHTING"
 echo "Teacher: $TEACHER_CONFIG → $TEACHER_CKPT"
 echo "Output: $OUTPUT_DIR"
 [ -f "$STUDENT_CONFIG" ] || { echo "Student config not found: $STUDENT_CONFIG"; exit 1; }
@@ -118,6 +119,7 @@ fi
     --turn_weight $TURN_WEIGHT \
     --turn_mode $TURN_MODE \
     --turn_threshold $TURN_THRESHOLD \
+    --vrate_weight $VRATE_WEIGHT \
     --z_weight $Z_WEIGHT \
     --time_weighting $TIME_WEIGHTING
 STATUS=$?
