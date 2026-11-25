@@ -1,0 +1,135 @@
+{
+  "settings": {
+    "ckpt": "best.pt",
+    "n_steps": 20,
+    "amp": null,
+    "nc_path": "/global/scratch/users/kevingeng/aviation-bayen/data/trajectories_adsblol_seq86_stage2.nc",
+    "device": "NVIDIA GeForce RTX 2080 Ti",
+    "accuracy": {
+      "n_samples": 20,
+      "max_batches": null,
+      "turn_deg": 45.0
+    },
+    "latency": {
+      "n_calls": 1000,
+      "batch_size": 64,
+      "n_samples": 1,
+      "n_warmup": 50,
+      "synthetic": false
+    }
+  },
+  "n_windows": 63016,
+  "n_turning": 15023,
+  "results": {
+    "gru1_2L_256": {
+      "params": 5803270,
+      "steps": 20,
+      "amp": false,
+      "accuracy": {
+        "minADE": 296.0412742088815,
+        "minFDE": 555.767383791914,
+        "avgADE": 980.4915298049305,
+        "avgFDE": 2385.975793722031,
+        "minFDE_turn": 1300.9140022083327,
+        "avgFDE_turn": 4787.315498787276,
+        "minADE_std": 538.0196909113967,
+        "minADE_p1": 23.205599212646483,
+        "minADE_p99": 2572.608203125,
+        "minFDE_std": 1151.3246369176145,
+        "minFDE_p1": 9.553967189788818,
+        "minFDE_p99": 5595.485864257806,
+        "avgADE_std": 1327.0861397369147,
+        "avgFDE_std": 3162.876891127175,
+        "minFDE_turn_std": 1802.060208556455,
+        "avgFDE_turn_std": 4222.90560789821
+      },
+      "latency": {
+        "mean_ms": 215.4985556313768,
+        "std_ms": 1.8707510231556816,
+        "min_ms": 209.04318196699023,
+        "p50_ms": 216.19806438684464,
+        "p90_ms": 217.12389052845538,
+        "p95_ms": 217.2935374546796,
+        "p99_ms": 217.63037688098848,
+        "max_ms": 218.75456580892205,
+        "ms_per_window": 3.3671649317402625,
+        "windows_per_s": 296.985749219943
+      }
+    },
+    "gru2_2L_256": {
+      "params": 5806342,
+      "steps": 20,
+      "amp": false,
+      "accuracy": {
+        "minADE": 297.1301884144503,
+        "minFDE": 556.632017330544,
+        "avgADE": 985.9726508260303,
+        "avgFDE": 2393.4552904966595,
+        "minFDE_turn": 1298.7863786432417,
+        "avgFDE_turn": 4824.269572202831,
+        "minADE_std": 534.6650867553226,
+        "minADE_p1": 24.522504615783692,
+        "minADE_p99": 2554.8063842773427,
+        "minFDE_std": 1159.1245275889548,
+        "minFDE_p1": 10.179667234420776,
+        "minFDE_p99": 5600.803881835936,
+        "avgADE_std": 1340.070184734119,
+        "avgFDE_std": 3201.2653748092976,
+        "minFDE_turn_std": 1805.4306822698686,
+        "avgFDE_turn_std": 4271.343595485501
+      },
+      "latency": {
+        "mean_ms": 222.9828996732831,
+        "std_ms": 0.7188698875422531,
+        "min_ms": 216.69605234637856,
+        "p50_ms": 223.05465722456574,
+        "p90_ms": 223.19359173998237,
+        "p95_ms": 223.24610073119402,
+        "p99_ms": 224.44857589434832,
+        "max_ms": 225.34002177417278,
+        "ms_per_window": 3.4841078073950484,
+        "windows_per_s": 287.01752508274615
+      }
+    },
+    "gru3_1L_256": {
+      "params": 5016838,
+      "steps": 20,
+      "amp": false,
+      "accuracy": {
+        "minADE": 300.0581509836044,
+        "minFDE": 559.5558563189805,
+        "avgADE": 984.2103917556652,
+        "avgFDE": 2387.706285283698,
+        "minFDE_turn": 1313.5596026847375,
+        "avgFDE_turn": 4858.562465807637,
+        "minADE_std": 540.8329011945754,
+        "minADE_p1": 25.332329273223877,
+        "minADE_p99": 2565.639294433592,
+        "minFDE_std": 1165.380220528326,
+        "minFDE_p1": 9.844413232803344,
+        "minFDE_p99": 5644.677563476553,
+        "avgADE_std": 1324.1188025542367,
+        "avgFDE_std": 3158.8197516928412,
+        "minFDE_turn_std": 1837.1375014932344,
+        "avgFDE_turn_std": 4244.191174139779
+      },
+      "latency": {
+        "mean_ms": 185.48897512303665,
+        "std_ms": 0.7330662713829053,
+        "min_ms": 184.5832383260131,
+        "p50_ms": 185.19691051915288,
+        "p90_ms": 186.8586473632604,
+        "p95_ms": 187.22518822178245,
+        "p99_ms": 187.57662056013942,
+        "max_ms": 187.7495818771422,
+        "ms_per_window": 2.8982652362974477,
+        "windows_per_s": 345.0339835968589
+      }
+    }
+  },
+  "folders": {
+    "gru1_2L_256": "finished_ckpt/3_gru/gru1_2L_256/model",
+    "gru2_2L_256": "finished_ckpt/3_gru/gru2_2L_256/model",
+    "gru3_1L_256": "finished_ckpt/3_gru/gru3_1L_256/model"
+  }
+}
