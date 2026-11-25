@@ -6,7 +6,7 @@ Usage (on Savio, from the repo root):
     SCRIPT=benchmark sbatch savio/job_eval.sh finished_ckpt/2_architecture
     SCRIPT=benchmark EVAL_ARGS="--max_batches 10 --out results/benchmark.json" sbatch savio/job_eval.sh
     SCRIPT=benchmark EVAL_ARGS="--n_steps 16 8 4 2 1 --out results/stage5.json" \
-        sbatch savio/job_eval.sh finished_ckpt/5_stepwise
+        sbatch savio/job_eval.sh finished_ckpt/5_stepwise_distillation
         # consistency models at every step count + each progressive round, in one file
 
 For every model:

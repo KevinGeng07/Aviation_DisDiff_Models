@@ -1,19 +1,19 @@
 #!/bin/bash
 # ---------------------------------------------------------------------------
-# Stage 5 — stepwise distillation of the selected model: progressive vs. consistency.
+# Stage 5 — stepwise distillation of the selected model (the best stage 4 run): progressive vs. consistency.
 # Submits three Slurm jobs:
 #   1. progressive_<base>   progressive distillation 32 → 16 → 8 → 4 → 2 → 1 steps   (1 GPU)
 #   2. consistency_<base>   consistency distillation                                 (1 GPU)
 #   3. compare_<base>       starts when 1 and 2 have both finished OK: eval/benchmark.py on
 #                           the base model, every progressive round and the consistency model
 #                           at 1/2/4/8/16 steps → results/stage5_<base>.json + table in its log
-# Output: finished_ckpt/5_stepwise/{progressive,consistency}_<base>[_s<seed>]/
+# Output: finished_ckpt/5_stepwise_distillation/{progressive,consistency}_<base>[_s<seed>]/
 #
 # Usage (on Savio, from anywhere):
-#   bash savio/stage5_stepwise.sh                                  # base 4_256
-#   bash savio/stage5_stepwise.sh finished_ckpt/4_rope/rope_ts_4L_256   # any run folder as base
-#   for s in 42 43 44; do SEED=$s bash savio/stage5_stepwise.sh; done  # 3 seeds
-#   CD_N=64 CD_LOSS=huber bash savio/stage5_stepwise.sh            # consistency settings
+#   bash savio/stage5_stepwise_distillation.sh                                  # base 4_256
+#   bash savio/stage5_stepwise_distillation.sh finished_ckpt/4_path_weighting/<best run>   # any run folder as base
+#   for s in 42 43 44; do SEED=$s bash savio/stage5_stepwise_distillation.sh; done  # 3 seeds
+#   CD_N=64 CD_LOSS=huber bash savio/stage5_stepwise_distillation.sh            # consistency settings
 # Any setting of savio/job_stepwise.sh (CD_EPOCHS, CD_N, LR, TURN_WEIGHT, Z_WEIGHT, ...) can be
 # set the same way. Re-running resumes: finished rounds / stages are skipped.
 # ---------------------------------------------------------------------------
@@ -33,7 +33,7 @@ fi
 SEED=${SEED:-42}
 SUFFIX=$([ "$SEED" = 42 ] || echo "_s$SEED")
 TIME_LIMIT=${TIME_LIMIT:-24:00:00}
-OUT=finished_ckpt/5_stepwise
+OUT=finished_ckpt/5_stepwise_distillation
 
 submit() {   # $1 = method → prints the job id
     local name=${1}_$LABEL$SUFFIX

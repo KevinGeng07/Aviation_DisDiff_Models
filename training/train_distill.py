@@ -35,6 +35,9 @@ Loss weighting (training/loss_weighting.py; validation losses stay unweighted so
 compare across runs):
   --turn_weight S, --turn_mode continuous|step, --turn_threshold DEG
       weight each window by how much its true future turns, in both terms (S = 0: off)
+  --vrate_weight S_v, --vrate_ref, --vrate_deadband
+      add S_v * clamp((dvz - deadband) / (ref - deadband), 0, 1) to each window's weight,
+      dvz = largest change of the future vertical rate from the last observed one (0: off)
   --z_weight W
       weight the altitude features (z, vz) W× the horizontal ones (W = 1: off)
 
@@ -398,6 +401,9 @@ def train(
     turn_weight    = 0.0,
     turn_mode      = "continuous",
     turn_threshold = 45.0,
+    vrate_weight   = 0.0,
+    vrate_ref      = 10.0,
+    vrate_deadband = 1.0,
     z_weight       = 1.0,
     time_weighting = "step",
     seed           = 42,
@@ -436,7 +442,8 @@ def train(
         device = torch.device(device if torch.cuda.is_available() else "cpu")
     log(f"Training on {device} x {world_size} GPU(s) — CFM + SWI_DiT distillation "
         f"({teacher_cfg.get('name', 'teacher')} → {student_cfg.get('name', 'student')}, "
-        f"alpha={alpha}, turn_weight={turn_weight} ({turn_mode}), z_weight={z_weight}, "
+        f"alpha={alpha}, turn_weight={turn_weight} ({turn_mode}), "
+        f"vrate_weight={vrate_weight} (ref {vrate_ref}, deadband {vrate_deadband} m/s), z_weight={z_weight}, "
         f"time_weighting={time_weighting}, seed={seed}, split_seed={split_seed})")
 
     # split_seed controls the aircraft-level train/val/test split
@@ -485,6 +492,9 @@ def train(
         "turn_weight":  turn_weight,
         "turn_mode":    turn_mode,
         "turn_threshold": turn_threshold,
+        "vrate_weight": vrate_weight,
+        "vrate_ref":    vrate_ref,
+        "vrate_deadband": vrate_deadband,
         "z_weight":     z_weight,
         "time_weighting": time_weighting,
         "seed":         seed,
@@ -561,7 +571,9 @@ def train(
                 v_teacher = teacher(obs, x_t, t, t_rel)
 
             sample_w = turn_weights(obs, fut, feat_mean_t, feat_std_t, turn_weight,
-                                    mode=turn_mode, threshold_deg=turn_threshold)
+                                    mode=turn_mode, threshold_deg=turn_threshold,
+                                    vrate_strength=vrate_weight, vrate_ref=vrate_ref,
+                                    vrate_deadband=vrate_deadband)
             loss_gt  = weighted_mse(v_pred, v_tgt, sample_w, time_weighting, feat_w)
             loss_kd  = weighted_mse(v_pred, v_teacher, sample_w, time_weighting, feat_w)
 
@@ -712,6 +724,13 @@ if __name__ == "__main__":
                               "step: 1 + S for windows turning >= --turn_threshold, else 1")
     parser.add_argument("--turn_threshold", type=float, default=45.0,
                          help="Degrees of turn that count as turning for --turn_mode step")
+    parser.add_argument("--vrate_weight", type=float, default=0.0,
+                         help="Extra loss weight S_v for windows whose vertical rate changes "
+                              "(level-off, start of descent); 0 = off. Added to the turn weight")
+    parser.add_argument("--vrate_ref", type=float, default=10.0,
+                         help="Vertical-rate change (m/s) at which the vertical weight saturates")
+    parser.add_argument("--vrate_deadband", type=float, default=1.0,
+                         help="Vertical-rate changes below this (m/s) count as level flight")
     parser.add_argument("--z_weight", type=float, default=1.0,
                          help="Loss weight of the altitude features (z, vz) relative to x, y, vx, vy "
                               "(1 = off)")
@@ -747,6 +766,9 @@ if __name__ == "__main__":
         turn_weight    = args.turn_weight,
         turn_mode      = args.turn_mode,
         turn_threshold = args.turn_threshold,
+        vrate_weight   = args.vrate_weight,
+        vrate_ref      = args.vrate_ref,
+        vrate_deadband = args.vrate_deadband,
         z_weight       = args.z_weight,
         time_weighting = args.time_weighting,
         seed           = args.seed,

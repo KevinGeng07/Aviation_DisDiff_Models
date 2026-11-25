@@ -1,17 +1,17 @@
 #!/bin/bash
 # ---------------------------------------------------------------------------
-# SLURM job script: stepwise distillation of a CFM + SWI_DiT model (pipeline stage 5), 1 GPU
+# SLURM job script: stepwise distillation of a CFM + SWI_DiT model (pipeline stage 5, stepwise_distillation), 1 GPU
 #   METHOD=progressive  (default) halve the Euler step count round by round, 32 → 1
 #   METHOD=consistency  one stage: learn to jump to the end of the teacher's path
 #
-# Easiest: savio/stage5_stepwise.sh submits both + the comparison.
+# Easiest: savio/stage5_stepwise_distillation.sh submits both + the comparison.
 # By hand (from the repo root; settings via --export, defaults below):
 #   sbatch --job-name=<name> --export=ALL,METHOD=consistency,BASE=4_256 \
 #          savio/job_stepwise.sh
 #
 # BASE is any model spec accepted by train_stepwise.py --base:
 # a shorthand like 4_256 (→ finished_ckpt/2_architecture/distill_4_256), 'teacher', a run folder or a .pt.
-# Output: finished_ckpt/5_stepwise/$RUN_NAME/model (progressive: one steps_NN folder per round).
+# Output: finished_ckpt/5_stepwise_distillation/$RUN_NAME/model (progressive: one steps_NN folder per round).
 # Resubmitting with the same RUN_NAME resumes (finished rounds / stages are skipped).
 # ---------------------------------------------------------------------------
 #SBATCH --job-name=stepwise_distill
@@ -69,7 +69,7 @@ CD_SOLVER=${CD_SOLVER:-heun}
 CD_TARGET_DECAY=${CD_TARGET_DECAY:-0.95}
 CD_LOSS=${CD_LOSS:-l2}
 CD_EVAL_STEPS=${CD_EVAL_STEPS:-1}
-OUTPUT_DIR=${OUTPUT_DIR:-$REPO/finished_ckpt/5_stepwise/$RUN_NAME/model}
+OUTPUT_DIR=${OUTPUT_DIR:-$REPO/finished_ckpt/5_stepwise_distillation/$RUN_NAME/model}
 
 echo "Run: $RUN_NAME | method: $METHOD | base: $BASE | lr=$LR (floor ×$MIN_LR_FRAC) | batch=$BATCH_SIZE | seed=$SEED | split_seed=$SPLIT_SEED"
 echo "Loss weighting: turn_weight=$TURN_WEIGHT ($TURN_MODE, threshold ${TURN_THRESHOLD}°) | z_weight=$Z_WEIGHT"

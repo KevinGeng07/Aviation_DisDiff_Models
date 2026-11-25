@@ -71,14 +71,14 @@ stores no fixed step count, so evaluate it at the step counts you want:
     4_256                            shorthand for finished_ckpt/2_architecture/distill_4_256
                                        (falls back to the older finished_ckpt/SWi_DiT/ layout)
     teacher                            the default teacher (configs/teacher_dit_cfm_20M.json)
-    finished_ckpt/4_rope/rope_ts_4L_256     any run folder; best.pt (--ckpt_name) is found inside,
+    finished_ckpt/extra_rope/rope_ts_4L_256     any run folder; best.pt (--ckpt_name) is found inside,
                                        split / compressed checkpoints are joined
     path/to/some.pt                    a checkpoint file
 
 The architecture comes from --base_config / --teacher_config if given, else
 student_config.json next to the checkpoint, else the config stored inside it.
 
-Progressive output layout (default <output_dir> = finished_ckpt/5_stepwise/progressive_<base>/model;
+Progressive output layout (default <output_dir> = finished_ckpt/5_stepwise_distillation/progressive_<base>/model;
 each round folder stores its step count, which eval/ uses automatically):
 
     <output_dir>/steps_16/{best.pt, last.pt, metrics.csv, student_config.json, done}
@@ -603,7 +603,7 @@ def main(args):
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
 
     output_dir = Path(args.output_dir or
-                      ROOT / "finished_ckpt" / "5_stepwise" / f"{args.method}_{run_label(args.base)}" / "model")
+                      ROOT / "finished_ckpt" / "5_stepwise_distillation" / f"{args.method}_{run_label(args.base)}" / "model")
     output_dir.mkdir(parents=True, exist_ok=True)
 
     num_workers = args.num_workers
@@ -684,7 +684,7 @@ if __name__ == "__main__":
     parser.add_argument("--ckpt_name", type=str, default="best.pt",
                         help="Checkpoint to use inside run folders (best.pt or last.pt)")
     parser.add_argument("--output_dir", type=str, default=None,
-                        help="Default: finished_ckpt/5_stepwise/<method>_<base>/model")
+                        help="Default: finished_ckpt/5_stepwise_distillation/<method>_<base>/model")
     parser.add_argument("--start_steps", type=int, default=32,
                         help="Euler steps of the round-1 teacher; halved every round "
                              "(consistency: only the teacher's reference minFDE uses it)")

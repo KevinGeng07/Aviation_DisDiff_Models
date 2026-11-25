@@ -6,17 +6,20 @@ a model samples many plausible 43-step futures. Every model is a **SWI_DiT**: a 
 Transformer with SwiGLU feed-forward blocks and AdaLN conditioning on the flow time.
 
 The work is one pipeline: train (or reuse) a large teacher, distil it into smaller students,
-test architectural alternatives, cut the number of sampling steps, and finally re-weight the
-loss towards the hard cases (turns, altitude).
+test architectural alternatives, tune the teacher/ground-truth balance (alpha), re-weight the
+loss towards the hard cases (turns, altitude), and finally cut the number of sampling steps.
+Path weighting comes before stepwise distillation because stepwise distillation only copies
+its base model: it can't learn to turn better than the base does.
 
 | Stage | What | Submit (on Savio) | Output (`finished_ckpt/…`) |
 |---|---|---|---|
 | 1 | Teacher: CITRIS DiT, 20.7 M (default) or 7.1 M — their `best.pt` | `bash savio/stage1_teacher.sh [--retrain] [config]` | `1_teacher/dit_cfm_{20M,7M}/` |
 | 2 | Architecture distillation: 7 students (2/4/6 layers × 128/256/384) | `bash savio/stage2_architectures.sh` | `2_architecture/distill_<L>_<d>/` |
 | 3 | GRU alternatives at d_model 256 (3 designs) | `bash savio/stage3_gru.sh` | `3_gru/gru<k>_…/` |
-| 4 | RoPE position embeddings (token index / real timestamps) | `bash savio/stage4_rope.sh` | `4_rope/rope_{index,ts}_4L_256/` |
-| 5 | Stepwise distillation: progressive vs. consistency | `bash savio/stage5_stepwise.sh [base]` | `5_stepwise/{progressive,consistency}_<base>/` |
-| 6 | Loss weighting: continuous / discrete turn weighting, Z-weighting | `bash savio/stage6_weighting.sh` | `6_weighting/<student>_<variant>/` |
+| α | Alpha sweep on the chosen student (4_256): ground-truth weight 0.7 / 0.5 / 0.3 / 0.1, picked on validation | `submit_distill_run.sh --alpha <a>` (see RUNS.txt) | `alpha/distill_4_256_a<a>/` |
+| 4 | Path weighting at the chosen alpha, 2×2: {step, linear} time weighting × {none, continuous turn + vertical-rate weighting} | `ALPHA=<a> bash savio/stage4_path_weighting.sh` | `4_path_weighting/<student>_<variant>/` |
+| 5 | Stepwise distillation of the best stage 4 model: progressive vs. consistency | `bash savio/stage5_stepwise_distillation.sh [base]` | `5_stepwise_distillation/{progressive,consistency}_<base>/` |
+| — | Extra (not in the pipeline): RoPE position embeddings (token index / real timestamps) | `bash savio/extra_rope.sh` | `extra_rope/rope_{index,ts}_4L_256/` |
 
 Every stage script takes `SEED=<n>` for extra seeds (folders get a `_s<n>` suffix). The data
 split is fixed separately (`--split_seed 42`), so all runs and all evaluations share one test set.
@@ -96,7 +99,7 @@ CFM: `x_t = (1 − t)·noise + t·future`, target velocity `future − noise`, `
 logit-normal; sampling integrates the predicted velocity with Euler steps from noise (`t = 0`)
 to data (`t = 1`), 20 steps unless stated. The loss weights the last quarter of the horizon ×2.
 
-Distillation (stages 2–4, 6): the student matches `0.7 ×` the ground-truth CFM loss and
+Distillation (stages 2–4 and the alpha sweep): by default the student matches `0.7 ×` the ground-truth CFM loss and
 `0.3 ×` the frozen teacher's velocity, each normalized by its running size. Stage 5 instead
 trains the selected student to sample in fewer steps: progressive distillation halves the
 step count round by round (32 → 1); consistency distillation learns
