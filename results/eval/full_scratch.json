@@ -1,0 +1,99 @@
+{
+  "settings": {
+    "ckpt": "best.pt",
+    "n_steps": 20,
+    "amp": null,
+    "nc_path": "/global/scratch/users/kevingeng/aviation-bayen/data/trajectories_adsblol_seq86_stage2.nc",
+    "device": "NVIDIA GeForce RTX 2080 Ti",
+    "accuracy": {
+      "n_samples": 20,
+      "max_batches": null,
+      "turn_deg": 45.0
+    },
+    "latency": {
+      "n_calls": 1000,
+      "batch_size": 64,
+      "n_samples": 1,
+      "n_warmup": 50,
+      "synthetic": false
+    }
+  },
+  "n_windows": 63016,
+  "n_turning": 15023,
+  "results": {
+    "scratch_4_256": {
+      "params": 5016838,
+      "steps": 20,
+      "amp": false,
+      "accuracy": {
+        "minADE": 301.5087298637449,
+        "minFDE": 566.0420314880348,
+        "avgADE": 1052.9151187483635,
+        "avgFDE": 2602.8536682400104,
+        "minFDE_turn": 1325.3404892689932,
+        "avgFDE_turn": 5171.058050442447,
+        "minADE_std": 533.2302989600825,
+        "minADE_p1": 25.829276943206786,
+        "minADE_p99": 2461.9969848632804,
+        "minFDE_std": 1127.2254662963499,
+        "minFDE_p1": 9.365254545211792,
+        "minFDE_p99": 5410.034375,
+        "avgADE_std": 1370.2185868852423,
+        "avgFDE_std": 3279.9635500505574,
+        "minFDE_turn_std": 1730.04620951875,
+        "avgFDE_turn_std": 4275.257096797788
+      },
+      "latency": {
+        "mean_ms": 147.04286729171872,
+        "std_ms": 0.721720937795865,
+        "min_ms": 145.03220608457923,
+        "p50_ms": 147.3310412839055,
+        "p90_ms": 147.77664300054312,
+        "p95_ms": 147.84482545219362,
+        "p99_ms": 148.03597597870976,
+        "max_ms": 148.37609697133303,
+        "ms_per_window": 2.297544801433105,
+        "windows_per_s": 435.2472253756467
+      }
+    },
+    "scratch_4_256_s43": {
+      "params": 5016838,
+      "steps": 20,
+      "amp": false,
+      "accuracy": {
+        "minADE": 300.26377607720656,
+        "minFDE": 564.099207257383,
+        "avgADE": 1045.3000673316103,
+        "avgFDE": 2587.1487137815197,
+        "minFDE_turn": 1320.2966064420623,
+        "avgFDE_turn": 5167.602844778631,
+        "minADE_std": 540.563423606137,
+        "minADE_p1": 25.018338108062743,
+        "minADE_p99": 2537.3327880859374,
+        "minFDE_std": 1146.1802829244987,
+        "minFDE_p1": 8.897361803054809,
+        "minFDE_p99": 5370.277050781244,
+        "avgADE_std": 1367.5259216248903,
+        "avgFDE_std": 3278.05476487299,
+        "minFDE_turn_std": 1767.1909177785974,
+        "avgFDE_turn_std": 4309.705082423653
+      },
+      "latency": {
+        "mean_ms": 148.09046855196357,
+        "std_ms": 0.21695292987486808,
+        "min_ms": 147.56546821445227,
+        "p50_ms": 148.15303008072078,
+        "p90_ms": 148.30156359821558,
+        "p95_ms": 148.35070441477,
+        "p99_ms": 148.45023329835385,
+        "max_ms": 148.69540371000767,
+        "ms_per_window": 2.3139135711244307,
+        "windows_per_s": 432.16825921205725
+      }
+    }
+  },
+  "folders": {
+    "scratch_4_256": "finished_ckpt/baseline/scratch_4_256/model",
+    "scratch_4_256_s43": "finished_ckpt/baseline/scratch_4_256_s43/model"
+  }
+}
