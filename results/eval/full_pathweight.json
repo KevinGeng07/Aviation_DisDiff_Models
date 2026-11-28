@@ -1,0 +1,135 @@
+{
+  "settings": {
+    "ckpt": "best.pt",
+    "n_steps": 20,
+    "amp": null,
+    "nc_path": "/global/scratch/users/kevingeng/aviation-bayen/data/trajectories_adsblol_seq86_stage2.nc",
+    "device": "NVIDIA GeForce RTX 2080 Ti",
+    "accuracy": {
+      "n_samples": 20,
+      "max_batches": null,
+      "turn_deg": 45.0
+    },
+    "latency": {
+      "n_calls": 1000,
+      "batch_size": 64,
+      "n_samples": 1,
+      "n_warmup": 50,
+      "synthetic": false
+    }
+  },
+  "n_windows": 63016,
+  "n_turning": 15023,
+  "results": {
+    "swi_dit_4L_256_time_linear_alpha0p5": {
+      "params": 5016838,
+      "steps": 20,
+      "amp": false,
+      "accuracy": {
+        "minADE": 302.9540163364389,
+        "minFDE": 567.8005960601772,
+        "avgADE": 1018.2947651067784,
+        "avgFDE": 2477.411726287768,
+        "minFDE_turn": 1330.738947383543,
+        "avgFDE_turn": 4959.455386896342,
+        "minADE_std": 546.0528313670713,
+        "minADE_p1": 24.40044231414795,
+        "minADE_p99": 2567.493933105469,
+        "minFDE_std": 1161.6046728544552,
+        "minFDE_p1": 10.026490545272827,
+        "minFDE_p99": 5609.833203124996,
+        "avgADE_std": 1361.0734257367694,
+        "avgFDE_std": 3235.855256637497,
+        "minFDE_turn_std": 1814.4791212277794,
+        "avgFDE_turn_std": 4281.305042982886
+      },
+      "latency": {
+        "mean_ms": 145.93918034713715,
+        "std_ms": 0.7424885106781607,
+        "min_ms": 143.43440812081099,
+        "p50_ms": 146.1557566653937,
+        "p90_ms": 146.63673765026033,
+        "p95_ms": 146.694079763256,
+        "p99_ms": 146.79604162462056,
+        "max_ms": 147.08350272849202,
+        "ms_per_window": 2.280299692924018,
+        "windows_per_s": 438.53884781158064
+      }
+    },
+    "swi_dit_4L_256_time_linear_turn_cont_S2_V2_alpha0p5": {
+      "params": 5016838,
+      "steps": 20,
+      "amp": false,
+      "accuracy": {
+        "minADE": 300.707787614827,
+        "minFDE": 557.5290642486879,
+        "avgADE": 1025.6076677822894,
+        "avgFDE": 2494.308076024343,
+        "minFDE_turn": 1269.9535813721695,
+        "avgFDE_turn": 4899.6911094394845,
+        "minADE_std": 525.11909062507,
+        "minADE_p1": 26.10464506149292,
+        "minADE_p99": 2512.485412597656,
+        "minFDE_std": 1117.0070221069295,
+        "minFDE_p1": 10.347312831878662,
+        "minFDE_p99": 5354.4187011718695,
+        "avgADE_std": 1353.2204580499197,
+        "avgFDE_std": 3229.3237749513437,
+        "minFDE_turn_std": 1711.0454897639604,
+        "avgFDE_turn_std": 4277.771929558627
+      },
+      "latency": {
+        "mean_ms": 146.84130094060674,
+        "std_ms": 0.20559834910087443,
+        "min_ms": 146.37703681364655,
+        "p50_ms": 146.8740445561707,
+        "p90_ms": 147.08305979147553,
+        "p95_ms": 147.1383687108755,
+        "p99_ms": 147.21668657381088,
+        "max_ms": 147.49098801985383,
+        "ms_per_window": 2.2943953271969804,
+        "windows_per_s": 435.8446812309722
+      }
+    },
+    "swi_dit_4L_256_turn_cont_S2_V2_alpha0p5": {
+      "params": 5016838,
+      "steps": 20,
+      "amp": false,
+      "accuracy": {
+        "minADE": 302.53835310675066,
+        "minFDE": 563.1050598601695,
+        "avgADE": 1022.7862636076552,
+        "avgFDE": 2486.7783044435146,
+        "minFDE_turn": 1289.5491727300691,
+        "avgFDE_turn": 4890.857800981204,
+        "minADE_std": 532.3501279537974,
+        "minADE_p1": 26.304099082946777,
+        "minADE_p99": 2544.7213623046805,
+        "minFDE_std": 1132.129158131766,
+        "minFDE_p1": 10.969318342208862,
+        "minFDE_p99": 5514.921704101558,
+        "avgADE_std": 1349.9873491836536,
+        "avgFDE_std": 3214.895328202381,
+        "minFDE_turn_std": 1745.264913572916,
+        "avgFDE_turn_std": 4251.217750945351
+      },
+      "latency": {
+        "mean_ms": 146.84616422420368,
+        "std_ms": 0.1787644680427665,
+        "min_ms": 146.33334428071976,
+        "p50_ms": 146.80339745245874,
+        "p90_ms": 147.1000261604786,
+        "p95_ms": 147.15152771677822,
+        "p99_ms": 147.37917865626514,
+        "max_ms": 147.73148065432906,
+        "ms_per_window": 2.2944713160031824,
+        "windows_per_s": 435.8302468308621
+      }
+    }
+  },
+  "folders": {
+    "swi_dit_4L_256_time_linear_alpha0p5": "finished_ckpt/4_path_weighting/swi_dit_4L_256_time_linear_alpha0p5/model",
+    "swi_dit_4L_256_time_linear_turn_cont_S2_V2_alpha0p5": "finished_ckpt/4_path_weighting/swi_dit_4L_256_time_linear_turn_cont_S2_V2_alpha0p5/model",
+    "swi_dit_4L_256_turn_cont_S2_V2_alpha0p5": "finished_ckpt/4_path_weighting/swi_dit_4L_256_turn_cont_S2_V2_alpha0p5/model"
+  }
+}

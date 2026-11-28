@@ -1,0 +1,171 @@
+{
+  "settings": {
+    "ckpt": "best.pt",
+    "n_steps": 20,
+    "amp": null,
+    "nc_path": "/global/scratch/users/kevingeng/aviation-bayen/data/trajectories_adsblol_seq86_stage2.nc",
+    "device": "NVIDIA GeForce RTX 2080 Ti",
+    "accuracy": {
+      "n_samples": 20,
+      "max_batches": null,
+      "turn_deg": 45.0
+    },
+    "latency": {
+      "n_calls": 1000,
+      "batch_size": 64,
+      "n_samples": 1,
+      "n_warmup": 50,
+      "synthetic": false
+    }
+  },
+  "n_windows": 63016,
+  "n_turning": 15023,
+  "results": {
+    "distill_4_256_a0.1_s43": {
+      "params": 5016838,
+      "steps": 20,
+      "amp": false,
+      "accuracy": {
+        "minADE": 301.77285649986214,
+        "minFDE": 564.0726045766155,
+        "avgADE": 1016.7714745808604,
+        "avgFDE": 2471.8849839475292,
+        "minFDE_turn": 1315.9937976287922,
+        "avgFDE_turn": 4952.888974405911,
+        "minADE_std": 543.1160917535826,
+        "minADE_p1": 24.10084934234619,
+        "minADE_p99": 2542.5718139648416,
+        "minFDE_std": 1150.5793786114132,
+        "minFDE_p1": 10.233330392837525,
+        "minFDE_p99": 5524.996484374983,
+        "avgADE_std": 1352.9408424477995,
+        "avgFDE_std": 3230.6692244260885,
+        "minFDE_turn_std": 1814.6454469641028,
+        "avgFDE_turn_std": 4297.224991073766
+      },
+      "latency": {
+        "mean_ms": 145.10596707323566,
+        "std_ms": 1.4398869125158447,
+        "min_ms": 140.89913293719292,
+        "p50_ms": 145.2716621570289,
+        "p90_ms": 146.78987241350114,
+        "p95_ms": 147.12644782848656,
+        "p99_ms": 147.95560066588223,
+        "max_ms": 149.86918587237597,
+        "ms_per_window": 2.267280735519307,
+        "windows_per_s": 441.0569826373777
+      }
+    },
+    "distill_4_256_a0.3_s43": {
+      "params": 5016838,
+      "steps": 20,
+      "amp": false,
+      "accuracy": {
+        "minADE": 301.36453507808284,
+        "minFDE": 563.7382560517865,
+        "avgADE": 1014.6802502291084,
+        "avgFDE": 2467.0910355356177,
+        "minFDE_turn": 1315.8688851085888,
+        "avgFDE_turn": 4943.3085778889035,
+        "minADE_std": 537.9101707477104,
+        "minADE_p1": 23.95462007522583,
+        "minADE_p99": 2540.408850097656,
+        "minFDE_std": 1154.2166316226924,
+        "minFDE_p1": 10.250812244415282,
+        "minFDE_p99": 5565.135107421871,
+        "avgADE_std": 1345.5577614577571,
+        "avgFDE_std": 3214.6587347828854,
+        "minFDE_turn_std": 1817.4047919080047,
+        "avgFDE_turn_std": 4276.479720383022
+      },
+      "latency": {
+        "mean_ms": 146.51515922974795,
+        "std_ms": 1.1826141444186458,
+        "min_ms": 143.5312321409583,
+        "p50_ms": 146.50884945876896,
+        "p90_ms": 147.98186630941927,
+        "p95_ms": 148.6102523515001,
+        "p99_ms": 149.48353364598006,
+        "max_ms": 149.97514011338353,
+        "ms_per_window": 2.2892993629648117,
+        "windows_per_s": 436.8148684167396
+      }
+    },
+    "distill_4_256_a0.5_s43": {
+      "params": 5016838,
+      "steps": 20,
+      "amp": false,
+      "accuracy": {
+        "minADE": 300.28493719136065,
+        "minFDE": 560.8280538685116,
+        "avgADE": 1014.5654733272105,
+        "avgFDE": 2468.5804509221866,
+        "minFDE_turn": 1307.1749172915331,
+        "avgFDE_turn": 4943.931985408832,
+        "minADE_std": 534.1622623382164,
+        "minADE_p1": 23.950937461853027,
+        "minADE_p99": 2539.518823242186,
+        "minFDE_std": 1135.8357318081187,
+        "minFDE_p1": 10.510494804382324,
+        "minFDE_p99": 5529.785083007812,
+        "avgADE_std": 1346.0527705382433,
+        "avgFDE_std": 3220.3631973162173,
+        "minFDE_turn_std": 1782.7755994971683,
+        "avgFDE_turn_std": 4285.717461109417
+      },
+      "latency": {
+        "mean_ms": 145.24694803962484,
+        "std_ms": 1.0031675875978028,
+        "min_ms": 143.557608127594,
+        "p50_ms": 145.2124787028879,
+        "p90_ms": 146.56741553917527,
+        "p95_ms": 146.94148467388004,
+        "p99_ms": 147.7163972845301,
+        "max_ms": 149.26695730537176,
+        "ms_per_window": 2.269483563119138,
+        "windows_per_s": 440.6288797375636
+      }
+    },
+    "distill_4_256_s43": {
+      "params": 5016838,
+      "steps": 20,
+      "amp": false,
+      "accuracy": {
+        "minADE": 301.65146672509263,
+        "minFDE": 566.330987538755,
+        "avgADE": 1014.2643966413292,
+        "avgFDE": 2470.137965085256,
+        "minFDE_turn": 1328.3781665394963,
+        "avgFDE_turn": 4968.905427043117,
+        "minADE_std": 543.6258490212302,
+        "minADE_p1": 23.821629333496094,
+        "minADE_p99": 2603.2792846679645,
+        "minFDE_std": 1165.011638489146,
+        "minFDE_p1": 9.972941207885743,
+        "minFDE_p99": 5624.917724609373,
+        "avgADE_std": 1353.8611398669807,
+        "avgFDE_std": 3231.6992527788457,
+        "minFDE_turn_std": 1835.767680439732,
+        "avgFDE_turn_std": 4316.17232251711
+      },
+      "latency": {
+        "mean_ms": 144.8416184638627,
+        "std_ms": 1.0059350337466118,
+        "min_ms": 143.47747387364507,
+        "p50_ms": 144.85513512045145,
+        "p90_ms": 146.18355366401374,
+        "p95_ms": 146.54956343583763,
+        "p99_ms": 147.2291408944875,
+        "max_ms": 148.50020362064242,
+        "ms_per_window": 2.2631502884978545,
+        "windows_per_s": 441.86195016847114
+      }
+    }
+  },
+  "folders": {
+    "distill_4_256_a0.1_s43": "finished_ckpt/alpha/distill_4_256_a0.1_s43/model",
+    "distill_4_256_a0.3_s43": "finished_ckpt/alpha/distill_4_256_a0.3_s43/model",
+    "distill_4_256_a0.5_s43": "finished_ckpt/alpha/distill_4_256_a0.5_s43/model",
+    "distill_4_256_s43": "finished_ckpt/2_architecture/distill_4_256_s43/model"
+  }
+}
